@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Productos – Ventas WhatsApp</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <span class="logo">📦</span>
+  <h1>Gestión de Productos</h1>
+  <nav>
+    <a href="index.html">Vendedor</a>
+    <a href="admin.html">Admin</a>
+  </nav>
+</header>
+
+<main>
+
+  <div id="alert-box" class="alert hidden"></div>
+
+  <!-- Agregar producto -->
+  <div class="card">
+    <h2>➕ Agregar producto</h2>
+    <form id="add-form" novalidate>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="p-name">Nombre *</label>
+          <input type="text" id="p-name" placeholder="Ej: Camiseta deportiva" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="p-category">Categoría</label>
+          <input type="text" id="p-category" placeholder="Ej: Ropa">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="p-price">Precio ($)</label>
+          <input type="number" id="p-price" min="0" step="0.01" placeholder="0">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:16px">Agregar producto</button>
+    </form>
+  </div>
+
+  <!-- Importar CSV -->
+  <div class="card">
+    <h2>📤 Importar desde CSV</h2>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:14px">
+      El archivo CSV debe tener las columnas: <strong>nombre</strong>, <strong>categoría</strong>, <strong>precio</strong>
+      (con encabezado en la primera fila). Separador: coma o punto y coma.
+    </p>
+    <form id="csv-form" enctype="multipart/form-data">
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:200px">
+          <label for="csv-file">Archivo CSV</label>
+          <input type="file" id="csv-file" accept=".csv,.txt" required>
+        </div>
+        <button type="submit" class="btn btn-secondary">Importar</button>
+      </div>
+    </form>
+
+    <div style="margin-top:16px">
+      <a href="#" id="download-sample" onclick="downloadSample();return false;" style="font-size:13px;color:var(--blue)">
+        ⬇️ Descargar CSV de ejemplo
+      </a>
+    </div>
+  </div>
+
+  <!-- Lista de productos -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="margin-bottom:0">📋 Productos cargados</h2>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="show-inactive" style="accent-color:var(--blue)">
+          Mostrar inactivos
+        </label>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Categoría</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="products-body">
+          <tr><td colspan="6"><div class="empty-state"><div class="icon">⏳</div><p>Cargando...</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p id="products-count" style="font-size:13px;color:var(--gray-600);margin-top:10px"></p>
+  </div>
+
+</main>
+
+<!-- Modal editar -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>✏️ Editar producto</h3>
+    <input type="hidden" id="edit-id">
+    <div class="form-group">
+      <label for="edit-name">Nombre *</label>
+      <input type="text" id="edit-name">
+    </div>
+    <div class="form-group">
+      <label for="edit-category">Categoría</label>
+      <input type="text" id="edit-category">
+    </div>
+    <div class="form-group">
+      <label for="edit-price">Precio ($)</label>
+      <input type="number" id="edit-price" min="0" step="0.01">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<script src="products.js"></script>
+</body>
+</html>

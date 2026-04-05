@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Administrador – Ventas WhatsApp</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-box">
+    <div class="logo-big">🔒</div>
+    <h2>Panel Administrador</h2>
+    <p>Ingresá la contraseña para acceder</p>
+    <div id="login-error" class="alert alert-error hidden">Contraseña incorrecta.</div>
+    <div class="form-group" style="text-align:left">
+      <label for="admin-pass">Contraseña</label>
+      <input type="password" id="admin-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="checkLogin()">Ingresar</button>
+  </div>
+</div>
+
+<!-- PANEL ADMIN (oculto hasta login) -->
+<div id="admin-panel" style="display:none">
+
+  <header>
+    <span class="logo">📊</span>
+    <h1>Panel Administrador</h1>
+    <nav>
+      <a href="index.html">Vendedor</a>
+      <a href="products.html">Productos</a>
+      <a href="#" onclick="logout()">Salir</a>
+    </nav>
+  </header>
+
+  <main class="wide">
+
+    <!-- Resumen -->
+    <div class="summary-grid" id="summary-grid">
+      <div class="summary-card">
+        <div class="value" id="sum-total">–</div>
+        <div class="label">Total registros</div>
+      </div>
+      <div class="summary-card yellow">
+        <div class="value" id="sum-proceso">–</div>
+        <div class="label">En proceso</div>
+      </div>
+      <div class="summary-card green">
+        <div class="value" id="sum-cerrado">–</div>
+        <div class="label">Ventas cerradas</div>
+      </div>
+      <div class="summary-card red">
+        <div class="value" id="sum-caido">–</div>
+        <div class="label">Ventas caídas</div>
+      </div>
+      <div class="summary-card">
+        <div class="value" id="sum-ticket">–</div>
+        <div class="label">Total tickets</div>
+      </div>
+      <div class="summary-card">
+        <div class="value" id="sum-msgs">–</div>
+        <div class="label">Mensajes enviados</div>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card">
+      <h2>🔍 Filtros</h2>
+      <div class="filters">
+        <div class="form-group">
+          <label for="f-date">Fecha exacta</label>
+          <input type="date" id="f-date">
+        </div>
+        <div class="form-group">
+          <label for="f-from">Desde</label>
+          <input type="date" id="f-from">
+        </div>
+        <div class="form-group">
+          <label for="f-to">Hasta</label>
+          <input type="date" id="f-to">
+        </div>
+        <div class="form-group">
+          <label for="f-seller">Vendedor</label>
+          <select id="f-seller">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn btn-primary" onclick="applyFilters()">Filtrar</button>
+          <button class="btn btn-secondary" onclick="clearFilters()">Limpiar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla de registros -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+        <h2 style="margin-bottom:0">📋 Registros</h2>
+        <button class="btn btn-success" onclick="exportExcel()">
+          ⬇️ Exportar a Excel
+        </button>
+      </div>
+
+      <div id="alert-admin" class="alert hidden"></div>
+
+      <div class="table-wrapper">
+        <table id="records-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Vendedor</th>
+              <th>Mensajes</th>
+              <th>Estado</th>
+              <th>Motivo caída</th>
+              <th>Productos</th>
+              <th>Ticket</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody id="records-body">
+            <tr><td colspan="10"><div class="empty-state"><div class="icon">⏳</div><p>Cargando registros...</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p id="records-count" style="font-size:13px;color:var(--gray-600);margin-top:10px"></p>
+    </div>
+
+  </main>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>

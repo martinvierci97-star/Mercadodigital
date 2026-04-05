@@ -1,0 +1,16 @@
+{
+  "name": "mi-sistema-ventas",
+  "version": "1.0.0",
+  "description": "Sistema de gestión de ventas por WhatsApp",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "express": "^4.18.2",
+    "multer": "^2.1.1",
+    "xlsx": "^0.18.5"
+  }
+}
