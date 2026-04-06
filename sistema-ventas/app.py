@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
 import sqlite3
+import os
+import tempfile
 from datetime import date
 
 app = Flask(__name__)
@@ -144,6 +146,110 @@ def agregar_producto():
         finally:
             conn.close()
     return redirect(url_for('index'))
+
+
+@app.route('/productos/importar', methods=['GET', 'POST'])
+def importar_productos():
+    if request.method == 'GET':
+        return render_template('importar.html', columnas=None, archivo_tmp=None)
+
+    # POST — primer paso: subir archivo y detectar columnas
+    if 'paso' not in request.form:
+        archivo = request.files.get('archivo')
+        if not archivo or not archivo.filename:
+            flash('Seleccioná un archivo Excel.', 'danger')
+            return redirect(url_for('importar_productos'))
+
+        ext = os.path.splitext(archivo.filename)[1].lower()
+        if ext not in ('.xlsx', '.xls', '.csv'):
+            flash('Formato no soportado. Usá .xlsx, .xls o .csv', 'danger')
+            return redirect(url_for('importar_productos'))
+
+        # Guardar temporalmente
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        archivo.save(tmp.name)
+        tmp.close()
+
+        try:
+            columnas, _ = _leer_archivo(tmp.name, ext, col=None)
+        except Exception as e:
+            flash(f'Error al leer el archivo: {e}', 'danger')
+            os.unlink(tmp.name)
+            return redirect(url_for('importar_productos'))
+
+        return render_template('importar.html', columnas=columnas,
+                               archivo_tmp=tmp.name, ext=ext)
+
+    # POST — segundo paso: elegir columna e importar
+    archivo_tmp = request.form.get('archivo_tmp', '')
+    ext         = request.form.get('ext', '.xlsx')
+    col         = request.form.get('columna', '')
+
+    if not archivo_tmp or not os.path.exists(archivo_tmp):
+        flash('La sesión expiró. Subí el archivo nuevamente.', 'warning')
+        return redirect(url_for('importar_productos'))
+
+    try:
+        _, nombres = _leer_archivo(archivo_tmp, ext, col=col)
+    except Exception as e:
+        flash(f'Error al procesar el archivo: {e}', 'danger')
+        return redirect(url_for('importar_productos'))
+    finally:
+        try:
+            os.unlink(archivo_tmp)
+        except OSError:
+            pass
+
+    conn = get_db()
+    agregados = 0
+    duplicados = 0
+    for nombre in nombres:
+        nombre = str(nombre).strip()
+        if not nombre or nombre.lower() == 'nan':
+            continue
+        try:
+            conn.execute('INSERT INTO productos (nombre) VALUES (?)', (nombre,))
+            agregados += 1
+        except sqlite3.IntegrityError:
+            duplicados += 1
+    conn.commit()
+    conn.close()
+
+    msg = f'Se importaron {agregados} productos correctamente.'
+    if duplicados:
+        msg += f' ({duplicados} ya existían y fueron ignorados.)'
+    flash(msg, 'success')
+    return redirect(url_for('index'))
+
+
+def _leer_archivo(path, ext, col):
+    """Devuelve (lista_columnas, lista_valores). col=None solo lee cabeceras."""
+    if ext == '.csv':
+        import csv
+        with open(path, newline='', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            columnas = reader.fieldnames or []
+            if col is None:
+                return columnas, []
+            valores = [row[col] for row in reader if col in row]
+        return columnas, valores
+    else:
+        import openpyxl
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+        if not rows:
+            return [], []
+        cabecera = [str(c) if c is not None else f'Columna {i+1}' for i, c in enumerate(rows[0])]
+        if col is None:
+            return cabecera, []
+        try:
+            idx = cabecera.index(col)
+        except ValueError:
+            idx = 0
+        valores = [row[idx] for row in rows[1:] if row[idx] is not None]
+        return cabecera, valores
 
 
 @app.route('/registro/eliminar/<int:registro_id>', methods=['POST'])

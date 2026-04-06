@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Importar productos desde Excel{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+
+    <div class="card">
+      <div class="card-header bg-success text-white py-3">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-spreadsheet-fill me-2"></i>Importar productos desde Excel / CSV</h5>
+      </div>
+      <div class="card-body p-4">
+
+        {% if not columnas %}
+        <!-- Paso 1: subir archivo -->
+        <p class="text-muted mb-4">
+          Subí tu archivo de productos (.xlsx, .xls o .csv). En el siguiente paso elegís qué columna contiene el nombre del producto.
+        </p>
+        <form action="/productos/importar" method="POST" enctype="multipart/form-data">
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Archivo de productos <span class="text-danger">*</span></label>
+            <input type="file" name="archivo" class="form-control" accept=".xlsx,.xls,.csv" required />
+            <div class="form-text">Formatos aceptados: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong></div>
+          </div>
+          <div class="d-grid">
+            <button type="submit" class="btn btn-success btn-lg">
+              <i class="bi bi-upload me-2"></i>Cargar archivo
+            </button>
+          </div>
+        </form>
+
+        {% else %}
+        <!-- Paso 2: elegir columna -->
+        <p class="text-muted mb-3">
+          Se detectaron <strong>{{ columnas|length }}</strong> columnas. Elegí cuál contiene los nombres de los productos:
+        </p>
+        <form action="/productos/importar" method="POST">
+          <input type="hidden" name="paso" value="2" />
+          <input type="hidden" name="archivo_tmp" value="{{ archivo_tmp }}" />
+          <input type="hidden" name="ext" value="{{ ext }}" />
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Columna con el nombre del producto <span class="text-danger">*</span></label>
+            <select name="columna" class="form-select" required>
+              {% for col in columnas %}
+              <option value="{{ col }}">{{ col }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg">
+              <i class="bi bi-check2-circle me-2"></i>Importar productos
+            </button>
+            <a href="/productos/importar" class="btn btn-outline-secondary">
+              <i class="bi bi-arrow-left me-1"></i>Volver a subir
+            </a>
+          </div>
+        </form>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <div class="text-center mt-3">
+      <a href="/" class="text-muted small"><i class="bi bi-arrow-left me-1"></i>Volver al formulario</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
