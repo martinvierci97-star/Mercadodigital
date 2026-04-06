@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Registrar Mensaje — Sistema de Ventas{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    {% if success %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <i class="bi bi-check-circle-fill me-2"></i>Registro guardado correctamente.
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white py-3">
+        <h5 class="mb-0"><i class="bi bi-chat-dots-fill me-2"></i>Registrar mensaje de WhatsApp</h5>
+      </div>
+      <div class="card-body p-4">
+        <form action="/registrar" method="POST" id="formVenta">
+
+          <!-- Vendedor + Fecha -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-7">
+              <label class="form-label fw-semibold">Vendedor <span class="text-danger">*</span></label>
+              <input type="text" name="vendedor" class="form-control" placeholder="Tu nombre" required />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Fecha <span class="text-danger">*</span></label>
+              <input type="date" name="fecha" class="form-control" value="{{ today }}" required />
+            </div>
+          </div>
+
+          <!-- Cliente -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Nombre del cliente <span class="text-danger">*</span></label>
+              <input type="text" name="cliente_nombre" class="form-control" placeholder="Nombre" required />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Apellido del cliente <span class="text-danger">*</span></label>
+              <input type="text" name="cliente_apellido" class="form-control" placeholder="Apellido" required />
+            </div>
+          </div>
+
+          <!-- Producto -->
+          <div class="mb-1">
+            <label class="form-label fw-semibold">Producto consultado <span class="text-danger">*</span></label>
+            <select name="producto_sel" id="selectProducto" class="form-select">
+              <option value="">— Seleccionar producto —</option>
+              {% for p in productos %}
+              <option value="{{ p.id }}"
+                      data-precio="{{ p.precio if p.precio else '' }}"
+                      data-marca="{{ p.marca if p.marca else '' }}"
+                      data-categoria="{{ p.categoria if p.categoria else '' }}">
+                {{ p.nombre }}{% if p.marca %} · {{ p.marca }}{% endif %}{% if p.categoria %} · {{ p.categoria }}{% endif %}
+              </option>
+              {% endfor %}
+              <option value="otro">Otro (ingresar manualmente)</option>
+            </select>
+          </div>
+
+          <!-- Info del producto seleccionado -->
+          <div id="productoInfo" class="mb-3 mt-2" style="display:none;">
+            <div class="alert alert-light border py-2 px-3 mb-0 d-flex gap-4 flex-wrap">
+              <span id="infoMarca" class="small text-muted"></span>
+              <span id="infoCategoria" class="small text-muted"></span>
+              <span id="infoPrecio" class="small fw-semibold text-success"></span>
+            </div>
+          </div>
+
+          <div class="mb-3" id="productoManualWrap" style="display:none;">
+            <label class="form-label fw-semibold">Ingresar producto manualmente</label>
+            <input type="text" name="producto_manual" id="productoManual" class="form-control" placeholder="Nombre del producto" />
+          </div>
+
+          <hr class="my-4" />
+
+          <!-- Estado del chat -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Estado del chat <span class="text-danger">*</span></label>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="estado" id="estadoCerrado" value="cerrado" required />
+                <label class="form-check-label" for="estadoCerrado">
+                  <span class="badge bg-success">Cerrado (venta)</span>
+                </label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="estado" id="estadoProceso" value="proceso" />
+                <label class="form-check-label" for="estadoProceso">
+                  <span class="badge bg-primary">En proceso</span>
+                </label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="estado" id="estadoCaida" value="caida" />
+                <label class="form-check-label" for="estadoCaida">
+                  <span class="badge bg-danger">Venta caída</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Motivo caída -->
+          <div class="mb-3" id="motivoWrap" style="display:none;">
+            <label class="form-label fw-semibold">Motivo de la caída <span class="text-danger">*</span></label>
+            <select name="motivo_caida" id="motivoCaida" class="form-select">
+              <option value="">— Seleccionar motivo —</option>
+              <option value="precio">Precio</option>
+              <option value="no_interes">No le interesó</option>
+              <option value="sin_respuesta">Sin respuesta</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+
+          <!-- Montos -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Monto / ticket solicitado</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="monto_solicitado" id="montoSolicitado"
+                       class="form-control" min="0" step="0.01" placeholder="0.00" />
+              </div>
+              <div class="form-text">Se completa automáticamente con el precio del producto.</div>
+            </div>
+            <div class="col-md-6" id="precioCierreWrap" style="display:none;">
+              <label class="form-label fw-semibold">Precio de cierre</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="precio_cierre" class="form-control"
+                       min="0" step="0.01" placeholder="0.00" />
+              </div>
+              <div class="form-text">Precio al que efectivamente se cerró la venta.</div>
+            </div>
+          </div>
+
+          <div class="d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">
+              <i class="bi bi-save2-fill me-2"></i>Guardar registro
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Agregar producto manualmente -->
+    <div class="card">
+      <div class="card-header bg-light py-2">
+        <h6 class="mb-0 text-muted"><i class="bi bi-box-seam me-2"></i>Agregar producto manualmente</h6>
+      </div>
+      <div class="card-body py-3">
+        <form action="/productos/agregar" method="POST">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <input type="text" name="nombre" class="form-control" placeholder="Nombre *" required />
+            </div>
+            <div class="col-md-3">
+              <input type="text" name="categoria" class="form-control" placeholder="Categoría" />
+            </div>
+            <div class="col-md-2">
+              <input type="text" name="marca" class="form-control" placeholder="Marca" />
+            </div>
+            <div class="col-md-2">
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="precio" class="form-control" placeholder="Precio" min="0" step="0.01" />
+              </div>
+            </div>
+            <div class="col-md-1">
+              <button type="submit" class="btn btn-outline-primary w-100" title="Agregar">
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PRODUCTOS = {{ productos_json|safe }};
+  const productoMap = {};
+  PRODUCTOS.forEach(p => productoMap[p.id] = p);
+
+  const selectProducto   = document.getElementById('selectProducto');
+  const productoInfo     = document.getElementById('productoInfo');
+  const infoMarca        = document.getElementById('infoMarca');
+  const infoCategoria    = document.getElementById('infoCategoria');
+  const infoPrecio       = document.getElementById('infoPrecio');
+  const manualWrap       = document.getElementById('productoManualWrap');
+  const productoManual   = document.getElementById('productoManual');
+  const montoSolicitado  = document.getElementById('montoSolicitado');
+
+  selectProducto.addEventListener('change', function () {
+    const val = this.value;
+    const p   = productoMap[parseInt(val)];
+
+    if (val === 'otro' || !val) {
+      manualWrap.style.display = 'block';
+      productoManual.required  = true;
+      productoInfo.style.display = 'none';
+      if (!val) montoSolicitado.value = '';
+    } else {
+      manualWrap.style.display = 'none';
+      productoManual.required  = false;
+      if (p) {
+        infoMarca.textContent     = p.marca     ? '🏷 ' + p.marca     : '';
+        infoCategoria.textContent = p.categoria ? '📂 ' + p.categoria : '';
+        infoPrecio.textContent    = p.precio    ? '💲 Precio lista: $' + Number(p.precio).toLocaleString('es-AR', {minimumFractionDigits: 2}) : '';
+        productoInfo.style.display = (p.marca || p.categoria || p.precio) ? 'block' : 'none';
+        // Auto-completar monto si el campo está vacío
+        if (p.precio && !montoSolicitado.value) {
+          montoSolicitado.value = p.precio;
+        }
+      }
+    }
+  });
+
+  document.querySelectorAll('input[name="estado"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      const motivoWrap     = document.getElementById('motivoWrap');
+      const motivo         = document.getElementById('motivoCaida');
+      const precioCierreWrap = document.getElementById('precioCierreWrap');
+
+      if (this.value === 'caida') {
+        motivoWrap.style.display     = 'block';
+        motivo.required              = true;
+        precioCierreWrap.style.display = 'none';
+      } else if (this.value === 'cerrado') {
+        motivoWrap.style.display     = 'none';
+        motivo.required              = false;
+        precioCierreWrap.style.display = 'block';
+      } else {
+        motivoWrap.style.display     = 'none';
+        motivo.required              = false;
+        precioCierreWrap.style.display = 'none';
+      }
+    });
+  });
+</script>
+{% endblock %}

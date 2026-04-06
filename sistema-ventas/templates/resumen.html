@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Resumen del día — Sistema de Ventas{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-end">
+  <div class="col-md-6">
+    <h4 class="fw-bold mb-0"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Resumen diario</h4>
+    <small class="text-muted">Todos los registros del día seleccionado</small>
+  </div>
+  <div class="col-md-6">
+    <form method="GET" action="/resumen" class="d-flex gap-2 justify-content-md-end mt-3 mt-md-0">
+      <input type="date" name="fecha" value="{{ fecha }}" class="form-control" style="max-width:200px;" />
+      <button type="submit" class="btn btn-primary text-nowrap">
+        <i class="bi bi-search me-1"></i>Ver día
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Tarjetas estadísticas -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card stat-total h-100">
+      <div class="card-body text-center py-3">
+        <div class="fs-1 fw-bold text-secondary">{{ total }}</div>
+        <div class="text-muted small">Total registros</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card stat-ventas h-100">
+      <div class="card-body text-center py-3">
+        <div class="fs-1 fw-bold text-success">{{ cerrados }}</div>
+        <div class="text-muted small">Ventas cerradas</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card stat-proceso h-100">
+      <div class="card-body text-center py-3">
+        <div class="fs-1 fw-bold text-primary">{{ en_proceso }}</div>
+        <div class="text-muted small">En proceso</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card stat-caida h-100">
+      <div class="card-body text-center py-3">
+        <div class="fs-1 fw-bold text-danger">{{ caidas }}</div>
+        <div class="text-muted small">Ventas caídas</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Total facturado -->
+{% if total_ventas %}
+<div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+  <i class="bi bi-cash-coin fs-4 me-3"></i>
+  <div>
+    <strong>Total facturado del día:</strong>
+    <span class="fs-5 ms-2">${{ "%.2f"|format(total_ventas) }}</span>
+  </div>
+</div>
+{% endif %}
+
+<!-- Tabla de registros -->
+{% if registros %}
+<div class="card">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h6 class="mb-0 fw-bold">Detalle de registros — {{ fecha }}</h6>
+    <span class="badge bg-secondary">{{ total }} registros</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Vendedor</th>
+          <th>Cliente</th>
+          <th>Producto</th>
+          <th>Estado</th>
+          <th>Motivo caída</th>
+          <th class="text-end">Monto solicitado</th>
+          <th class="text-end">Precio cierre</th>
+          <th class="text-end">Descuento</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registros %}
+        {% set descuento = none %}
+        {% if r.monto_solicitado and r.precio_cierre and r.estado == 'cerrado' %}
+          {% set descuento = r.monto_solicitado - r.precio_cierre %}
+        {% endif %}
+        <tr>
+          <td class="fw-semibold">{{ r.vendedor }}</td>
+          <td>{{ r.cliente_nombre }} {{ r.cliente_apellido }}</td>
+          <td>{{ r.producto }}</td>
+          <td>
+            {% if r.estado == 'cerrado' %}
+              <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Cerrado</span>
+            {% elif r.estado == 'proceso' %}
+              <span class="badge bg-primary"><i class="bi bi-hourglass-split me-1"></i>En proceso</span>
+            {% else %}
+              <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Venta caída</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.motivo_caida %}
+              {% if r.motivo_caida == 'precio' %}Precio
+              {% elif r.motivo_caida == 'no_interes' %}No le interesó
+              {% elif r.motivo_caida == 'sin_respuesta' %}Sin respuesta
+              {% else %}Otro{% endif %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if r.monto_solicitado %}${{ "%.2f"|format(r.monto_solicitado) }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="text-end">
+            {% if r.precio_cierre and r.estado == 'cerrado' %}
+              <span class="text-success fw-semibold">${{ "%.2f"|format(r.precio_cierre) }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if descuento is not none and descuento > 0 %}
+              <span class="badge bg-warning text-dark">-${{ "%.2f"|format(descuento) }}</span>
+            {% elif descuento is not none and descuento == 0 %}
+              <span class="text-muted small">Sin dcto.</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <form action="/registro/eliminar/{{ r.id }}" method="POST"
+                  onsubmit="return confirm('¿Eliminar este registro?')">
+              <input type="hidden" name="fecha" value="{{ fecha }}" />
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+  No hay registros para el día <strong>{{ fecha }}</strong>.
+  <div class="mt-3">
+    <a href="/" class="btn btn-primary"><i class="bi bi-plus-circle me-2"></i>Cargar primer registro</a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
