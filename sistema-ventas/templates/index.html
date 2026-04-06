@@ -12,7 +12,6 @@
     </div>
     {% endif %}
 
-    <!-- Formulario principal -->
     <div class="card mb-4">
       <div class="card-header bg-primary text-white py-3">
         <h5 class="mb-0"><i class="bi bi-chat-dots-fill me-2"></i>Registrar mensaje de WhatsApp</h5>
@@ -20,7 +19,7 @@
       <div class="card-body p-4">
         <form action="/registrar" method="POST" id="formVenta">
 
-          <!-- Fila 1: Vendedor + Fecha -->
+          <!-- Vendedor + Fecha -->
           <div class="row g-3 mb-3">
             <div class="col-md-7">
               <label class="form-label fw-semibold">Vendedor <span class="text-danger">*</span></label>
@@ -32,7 +31,7 @@
             </div>
           </div>
 
-          <!-- Fila 2: Cliente -->
+          <!-- Cliente -->
           <div class="row g-3 mb-3">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Nombre del cliente <span class="text-danger">*</span></label>
@@ -45,16 +44,31 @@
           </div>
 
           <!-- Producto -->
-          <div class="mb-3">
+          <div class="mb-1">
             <label class="form-label fw-semibold">Producto consultado <span class="text-danger">*</span></label>
             <select name="producto_sel" id="selectProducto" class="form-select">
               <option value="">— Seleccionar producto —</option>
               {% for p in productos %}
-              <option value="{{ p.id }}">{{ p.nombre }}</option>
+              <option value="{{ p.id }}"
+                      data-precio="{{ p.precio if p.precio else '' }}"
+                      data-marca="{{ p.marca if p.marca else '' }}"
+                      data-categoria="{{ p.categoria if p.categoria else '' }}">
+                {{ p.nombre }}{% if p.marca %} · {{ p.marca }}{% endif %}{% if p.categoria %} · {{ p.categoria }}{% endif %}
+              </option>
               {% endfor %}
               <option value="otro">Otro (ingresar manualmente)</option>
             </select>
           </div>
+
+          <!-- Info del producto seleccionado -->
+          <div id="productoInfo" class="mb-3 mt-2" style="display:none;">
+            <div class="alert alert-light border py-2 px-3 mb-0 d-flex gap-4 flex-wrap">
+              <span id="infoMarca" class="small text-muted"></span>
+              <span id="infoCategoria" class="small text-muted"></span>
+              <span id="infoPrecio" class="small fw-semibold text-success"></span>
+            </div>
+          </div>
+
           <div class="mb-3" id="productoManualWrap" style="display:none;">
             <label class="form-label fw-semibold">Ingresar producto manualmente</label>
             <input type="text" name="producto_manual" id="productoManual" class="form-control" placeholder="Nombre del producto" />
@@ -87,7 +101,7 @@
             </div>
           </div>
 
-          <!-- Motivo caída (oculto por defecto) -->
+          <!-- Motivo caída -->
           <div class="mb-3" id="motivoWrap" style="display:none;">
             <label class="form-label fw-semibold">Motivo de la caída <span class="text-danger">*</span></label>
             <select name="motivo_caida" id="motivoCaida" class="form-select">
@@ -105,15 +119,17 @@
               <label class="form-label fw-semibold">Monto / ticket solicitado</label>
               <div class="input-group">
                 <span class="input-group-text">$</span>
-                <input type="number" name="monto_solicitado" class="form-control" min="0" step="0.01" placeholder="0.00" />
+                <input type="number" name="monto_solicitado" id="montoSolicitado"
+                       class="form-control" min="0" step="0.01" placeholder="0.00" />
               </div>
-              <div class="form-text">Precio que cotizaste al cliente.</div>
+              <div class="form-text">Se completa automáticamente con el precio del producto.</div>
             </div>
             <div class="col-md-6" id="precioCierreWrap" style="display:none;">
               <label class="form-label fw-semibold">Precio de cierre</label>
               <div class="input-group">
                 <span class="input-group-text">$</span>
-                <input type="number" name="precio_cierre" class="form-control" min="0" step="0.01" placeholder="0.00" />
+                <input type="number" name="precio_cierre" class="form-control"
+                       min="0" step="0.01" placeholder="0.00" />
               </div>
               <div class="form-text">Precio al que efectivamente se cerró la venta.</div>
             </div>
@@ -128,17 +144,35 @@
       </div>
     </div>
 
-    <!-- Agregar producto -->
+    <!-- Agregar producto manualmente -->
     <div class="card">
       <div class="card-header bg-light py-2">
-        <h6 class="mb-0 text-muted"><i class="bi bi-box-seam me-2"></i>Agregar nuevo producto a la lista</h6>
+        <h6 class="mb-0 text-muted"><i class="bi bi-box-seam me-2"></i>Agregar producto manualmente</h6>
       </div>
       <div class="card-body py-3">
-        <form action="/productos/agregar" method="POST" class="d-flex gap-2">
-          <input type="text" name="nombre" class="form-control" placeholder="Nombre del producto" required />
-          <button type="submit" class="btn btn-outline-primary text-nowrap">
-            <i class="bi bi-plus-lg me-1"></i>Agregar
-          </button>
+        <form action="/productos/agregar" method="POST">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <input type="text" name="nombre" class="form-control" placeholder="Nombre *" required />
+            </div>
+            <div class="col-md-3">
+              <input type="text" name="categoria" class="form-control" placeholder="Categoría" />
+            </div>
+            <div class="col-md-2">
+              <input type="text" name="marca" class="form-control" placeholder="Marca" />
+            </div>
+            <div class="col-md-2">
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" name="precio" class="form-control" placeholder="Precio" min="0" step="0.01" />
+              </div>
+            </div>
+            <div class="col-md-1">
+              <button type="submit" class="btn btn-outline-primary w-100" title="Agregar">
+                <i class="bi bi-plus-lg"></i>
+              </button>
+            </div>
+          </div>
         </form>
       </div>
     </div>
@@ -149,38 +183,62 @@
 
 {% block scripts %}
 <script>
-  // Mostrar/ocultar campo producto manual
-  document.getElementById('selectProducto').addEventListener('change', function () {
-    const wrap = document.getElementById('productoManualWrap');
-    const inp  = document.getElementById('productoManual');
-    if (this.value === 'otro' || this.value === '') {
-      wrap.style.display = 'block';
-      inp.required = true;
+  const PRODUCTOS = {{ productos_json|safe }};
+  const productoMap = {};
+  PRODUCTOS.forEach(p => productoMap[p.id] = p);
+
+  const selectProducto   = document.getElementById('selectProducto');
+  const productoInfo     = document.getElementById('productoInfo');
+  const infoMarca        = document.getElementById('infoMarca');
+  const infoCategoria    = document.getElementById('infoCategoria');
+  const infoPrecio       = document.getElementById('infoPrecio');
+  const manualWrap       = document.getElementById('productoManualWrap');
+  const productoManual   = document.getElementById('productoManual');
+  const montoSolicitado  = document.getElementById('montoSolicitado');
+
+  selectProducto.addEventListener('change', function () {
+    const val = this.value;
+    const p   = productoMap[parseInt(val)];
+
+    if (val === 'otro' || !val) {
+      manualWrap.style.display = 'block';
+      productoManual.required  = true;
+      productoInfo.style.display = 'none';
+      if (!val) montoSolicitado.value = '';
     } else {
-      wrap.style.display = 'none';
-      inp.required = false;
+      manualWrap.style.display = 'none';
+      productoManual.required  = false;
+      if (p) {
+        infoMarca.textContent     = p.marca     ? '🏷 ' + p.marca     : '';
+        infoCategoria.textContent = p.categoria ? '📂 ' + p.categoria : '';
+        infoPrecio.textContent    = p.precio    ? '💲 Precio lista: $' + Number(p.precio).toLocaleString('es-AR', {minimumFractionDigits: 2}) : '';
+        productoInfo.style.display = (p.marca || p.categoria || p.precio) ? 'block' : 'none';
+        // Auto-completar monto si el campo está vacío
+        if (p.precio && !montoSolicitado.value) {
+          montoSolicitado.value = p.precio;
+        }
+      }
     }
   });
 
-  // Mostrar/ocultar motivo caída y precio de cierre según estado
   document.querySelectorAll('input[name="estado"]').forEach(function (radio) {
     radio.addEventListener('change', function () {
-      const motivoWrap = document.getElementById('motivoWrap');
-      const motivo     = document.getElementById('motivoCaida');
-      const precioWrap = document.getElementById('precioCierreWrap');
+      const motivoWrap     = document.getElementById('motivoWrap');
+      const motivo         = document.getElementById('motivoCaida');
+      const precioCierreWrap = document.getElementById('precioCierreWrap');
 
       if (this.value === 'caida') {
-        motivoWrap.style.display = 'block';
-        motivo.required = true;
-        precioWrap.style.display = 'none';
+        motivoWrap.style.display     = 'block';
+        motivo.required              = true;
+        precioCierreWrap.style.display = 'none';
       } else if (this.value === 'cerrado') {
-        motivoWrap.style.display = 'none';
-        motivo.required = false;
-        precioWrap.style.display = 'block';
+        motivoWrap.style.display     = 'none';
+        motivo.required              = false;
+        precioCierreWrap.style.display = 'block';
       } else {
-        motivoWrap.style.display = 'none';
-        motivo.required = false;
-        precioWrap.style.display = 'none';
+        motivoWrap.style.display     = 'none';
+        motivo.required              = false;
+        precioCierreWrap.style.display = 'none';
       }
     });
   });

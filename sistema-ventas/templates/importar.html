@@ -7,58 +7,64 @@
 
     <div class="card">
       <div class="card-header bg-success text-white py-3">
-        <h5 class="mb-0"><i class="bi bi-file-earmark-spreadsheet-fill me-2"></i>Importar productos desde Excel / CSV</h5>
+        <h5 class="mb-0"><i class="bi bi-file-earmark-spreadsheet-fill me-2"></i>Importar productos desde Excel</h5>
       </div>
       <div class="card-body p-4">
 
-        {% if not columnas %}
-        <!-- Paso 1: subir archivo -->
-        <p class="text-muted mb-4">
-          Subí tu archivo de productos (.xlsx, .xls o .csv). En el siguiente paso elegís qué columna contiene el nombre del producto.
+        <p class="text-muted mb-3">
+          Subí el archivo de productos. La app detecta automáticamente las columnas
+          <strong>(P)Nombre</strong>, <strong>(P)Categoria</strong>, <strong>(P)Marca</strong> y <strong>Precio</strong>.
         </p>
+
+        <div class="alert alert-info py-2 mb-4">
+          <i class="bi bi-info-circle me-2"></i>
+          Formatos aceptados: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>
+        </div>
+
         <form action="/productos/importar" method="POST" enctype="multipart/form-data">
           <div class="mb-4">
             <label class="form-label fw-semibold">Archivo de productos <span class="text-danger">*</span></label>
             <input type="file" name="archivo" class="form-control" accept=".xlsx,.xls,.csv" required />
-            <div class="form-text">Formatos aceptados: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong></div>
           </div>
           <div class="d-grid">
             <button type="submit" class="btn btn-success btn-lg">
-              <i class="bi bi-upload me-2"></i>Cargar archivo
+              <i class="bi bi-upload me-2"></i>Importar productos
             </button>
           </div>
         </form>
 
-        {% else %}
-        <!-- Paso 2: elegir columna -->
-        <p class="text-muted mb-3">
-          Se detectaron <strong>{{ columnas|length }}</strong> columnas. Elegí cuál contiene los nombres de los productos:
-        </p>
-        <form action="/productos/importar" method="POST">
-          <input type="hidden" name="paso" value="2" />
-          <input type="hidden" name="archivo_tmp" value="{{ archivo_tmp }}" />
-          <input type="hidden" name="ext" value="{{ ext }}" />
+      </div>
+    </div>
 
-          <div class="mb-4">
-            <label class="form-label fw-semibold">Columna con el nombre del producto <span class="text-danger">*</span></label>
-            <select name="columna" class="form-select" required>
-              {% for col in columnas %}
-              <option value="{{ col }}">{{ col }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success btn-lg">
-              <i class="bi bi-check2-circle me-2"></i>Importar productos
-            </button>
-            <a href="/productos/importar" class="btn btn-outline-secondary">
-              <i class="bi bi-arrow-left me-1"></i>Volver a subir
-            </a>
-          </div>
-        </form>
-        {% endif %}
-
+    <!-- Formato esperado -->
+    <div class="card mt-3">
+      <div class="card-header bg-light py-2">
+        <h6 class="mb-0 text-muted"><i class="bi bi-table me-2"></i>Formato esperado del archivo</h6>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0 small">
+          <thead class="table-light">
+            <tr>
+              <th>Id</th>
+              <th>(P)Nombre</th>
+              <th>(P)Categoria</th>
+              <th>(P)Marca</th>
+              <th>Precio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="text-muted">
+              <td>1</td>
+              <td>Nombre del producto</td>
+              <td>Electrónica</td>
+              <td>Samsung</td>
+              <td>15000.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer text-muted small">
+        La columna <strong>Id</strong> se ignora. Las demás se importan automáticamente.
       </div>
     </div>
 
