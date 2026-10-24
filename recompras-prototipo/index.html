@@ -260,6 +260,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
 
   // ===================== ESTADO =====================
   let ORD = [];            // pedidos normalizados
+  let PREV = [];           // pedidos anteriores, para sumar un archivo nuevo
   let CL = [];             // clientes
   let OPS = [];            // oportunidades
   let STATS = null;        // agregados
@@ -280,7 +281,11 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     fecha: ['fecha'], cliente: ['cliente'], tel: ['telefono', 'teléfono', 'celular'], vend: ['vendedor'], cat: ['categoria', 'categoría'],
     marca: ['marca'], prods: ['productos', 'producto'], total: ['total'], pago: ['metedod de pago', 'metodo de pago', 'método de pago'],
     entrega: ['delivery', 'entrega'], mkt: ['marketplace', 'canal'], estado: ['estado'],
+    pedido: ['pedido', 'numero de pedido', 'nro de pedido', 'nro pedido', 'n° pedido', 'nº pedido', 'id pedido', 'id', 'orden', 'order', 'order id'],
+    variante: ['variante', 'variantes', 'id variante', 'ids variantes', 'codigo variante', 'sku', 'skus', 'variant', 'variant id'],
   };
+  const ANULADO = /cancel|devuel|devoluc|reembols|anulad|rechaz/i;
+  let ANULADOS = 0, ANULADOS_ID = [];
   function parseFecha(v) {
     if (v instanceof Date) return v.getTime();
     if (typeof v === 'number') return Math.round((v - 25569) * DAY);
@@ -288,12 +293,17 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     if (!m) return NaN;
     return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 12), +(m[5] || 0)).getTime();
   }
-  function parseProds(s) {
-    return String(s || '').split(/;\s*/).map((p) => p.trim()).filter(Boolean).map((p) => {
+  function parseProds(s, vars) {
+    // Productos y variantes vienen en el mismo orden, separados por ";"
+    const vs = String(vars ?? '').split(/;\s*/).map((v) => v.trim());
+    return String(s || '').split(/;\s*/).map((p) => p.trim()).filter(Boolean).map((p, i) => {
       const m = p.match(/^(\d+)\s*x\s*(.+)$/i);
-      return m ? { q: +m[1], n: m[2].trim() } : { q: 1, n: p };
+      const it = m ? { q: +m[1], n: m[2].trim() } : { q: 1, n: p };
+      if (vs[i]) it.v = vs[i];
+      return it;
     });
   }
+  const pkey = (p) => (p.v ? 'v:' + p.v : norm(p.n));
   function telKey(t) {
     let d = String(t || '').replace(/\D/g, '');
     if (d.startsWith('0') && d.length >= 9) d = '595' + d.slice(1);
@@ -309,18 +319,21 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     const falta = ['fecha', 'cliente', 'tel', 'total'].filter((k) => idx[k] < 0);
     if (falta.length) throw new Error('Faltan columnas: ' + falta.join(', ') + '. Columnas del archivo: ' + rows[0].filter(Boolean).join(', '));
     const g = (r, k) => (idx[k] >= 0 ? r[idx[k]] : null);
-    const out = [];
+    const out = new Map(); let sinId = 0; ANULADOS = 0; ANULADOS_ID = [];
     for (const r of rows.slice(1)) {
       const f = parseFecha(g(r, 'fecha'));
       if (!isFinite(f)) continue;
-      out.push({
+      if (ANULADO.test(String(g(r, 'estado') || ''))) { ANULADOS++; const aid = String(g(r, 'pedido') ?? '').trim(); if (aid) ANULADOS_ID.push(aid); continue; }
+      const id = String(g(r, 'pedido') ?? '').trim();
+      out.set(id ? 'p:' + id : 'x' + (sinId++), {
+        id: id || null,
         f, cli: String(g(r, 'cliente') || '').replace(/\s+/g, ' ').trim(), tel: telKey(g(r, 'tel')),
         vend: String(g(r, 'vend') || '').replace(/\s+/g, ' ').trim(), cat: String(g(r, 'cat') || '').trim(),
-        marca: String(g(r, 'marca') || '').trim(), prods: parseProds(g(r, 'prods')), total: Number(g(r, 'total')) || 0,
+        marca: String(g(r, 'marca') || '').trim(), prods: parseProds(g(r, 'prods'), g(r, 'variante')), total: Number(g(r, 'total')) || 0,
         pago: String(g(r, 'pago') || '').trim(), mkt: String(g(r, 'mkt') || '').trim() || 'Mercado Digital', estado: String(g(r, 'estado') || '').trim(),
       });
     }
-    return out;
+    return [...out.values()];
   }
 
   // ===================== MOTOR =====================
@@ -332,12 +345,12 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     // Precio por producto: exacto si el pedido tiene un solo producto; si tiene varios, se reparte el total
     // según el precio de cada producto cuando se vendió solo (estimado)
     const ref = {};
-    ORD.forEach((o) => { if (o.prods.length === 1) { const k = norm(o.prods[0].n); (ref[k] ||= []).push(o.total / o.prods[0].q); } });
+    ORD.forEach((o) => { if (o.prods.length === 1) { const k = pkey(o.prods[0]); (ref[k] ||= []).push(o.total / o.prods[0].q); } });
     const med = (a) => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
     const refP = {}; for (const [k, a] of Object.entries(ref)) refP[k] = med(a);
     ORD.forEach((o) => {
       if (o.prods.length === 1) { o.prods[0].pu = o.total / o.prods[0].q; o.prods[0].est = false; return; }
-      const w = o.prods.map((p) => (refP[norm(p.n)] || 0) * p.q);
+      const w = o.prods.map((p) => (refP[pkey(p)] || 0) * p.q);
       const sw = w.reduce((s, x) => s + x, 0);
       o.prods.forEach((p, i) => { p.pu = sw > 0 && w.every((x) => x > 0) ? (o.total * w[i] / sw) / p.q : o.total / o.prods.reduce((s, x) => s + x.q, 0); p.est = true; });
     });
@@ -497,13 +510,24 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
         const buf = await f.arrayBuffer();
         const wb = /\.csv$/i.test(f.name) ? XLSX.read(new TextDecoder('utf-8').decode(buf), { type: 'string' }) : XLSX.read(buf, { type: 'array', cellDates: false });
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
-        ORD = cargarFilas(rows);
-        if (!ORD.length) throw new Error('No encontré pedidos con fecha válida en el archivo.');
+        const nuevos = cargarFilas(rows);
+        if (!nuevos.length) throw new Error('No encontré pedidos con fecha válida en el archivo.');
+        // Si los pedidos traen número, el archivo nuevo se suma al anterior sin duplicar
+        let resumen = `${nuevos.length.toLocaleString('es-PY')} pedidos cargados`;
+        if (PREV.length && nuevos.every((o) => o.id) && PREV.every((o) => o.id)) {
+          const m = new Map(PREV.map((o) => ['p:' + o.id, o]));
+          let alta = 0; nuevos.forEach((o) => { if (!m.has('p:' + o.id)) alta++; m.set('p:' + o.id, o); });
+          ANULADOS_ID.forEach((id) => m.delete('p:' + id)); // un pedido cancelado después se saca
+          ORD = [...m.values()];
+          resumen = `${alta.toLocaleString('es-PY')} pedidos nuevos, ${(nuevos.length - alta).toLocaleString('es-PY')} ya estaban. Total: ${ORD.length.toLocaleString('es-PY')}`;
+        } else ORD = nuevos;
+        PREV = [];
+        if (ANULADOS) resumen += ` · ${ANULADOS} cancelados o devueltos quedaron afuera`;
         const ok = store.set('mr-ord', JSON.stringify(ORD));
         procesar(); role = 'duenio';
         document.querySelectorAll('.roles button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.role === role)));
         render();
-        toast(`Listo: ${ORD.length.toLocaleString('es-PY')} pedidos cargados${ok ? '' : ' (no se pudieron guardar en este dispositivo)'}`);
+        toast(`Listo: ${resumen}${ok ? '' : ' (no se pudieron guardar en este dispositivo)'}`);
       } catch (ex) { app.innerHTML = vCarga(ex.message || String(ex)); wireCarga(app); }
     });
   }
@@ -875,6 +899,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       <div class="hdr"><h2 class="sec">Calidad de los datos</h2><p class="sub">Lo que el sistema dejó afuera o marcó, para que la lista no tenga errores.</p></div>
       <div class="kpis num">
         <div class="kpi"><span class="k">Pedidos leídos</span><span class="v">${S.n.toLocaleString('es-PY')}</span><span class="d">${fechaCorta(S.desde)} al ${fechaCorta(S.hasta)}</span></div>
+        <div class="kpi"><span class="k">Número de pedido y variante</span><span class="v">${ORD.every((o) => o.id) ? 'Sí' : 'No'} / ${ORD.some((o) => o.prods.some((p) => p.v)) ? 'Sí' : 'No'}</span><span class="d">${ORD.every((o) => o.id) ? 'Se pueden sumar archivos diarios sin duplicar.' : 'Sin número de pedido, cada archivo reemplaza al anterior.'} ${ORD.some((o) => o.prods.some((p) => p.v)) ? 'Variantes listas para cruzar con la API.' : 'Falta la variante para traer el margen.'}</span></div>
         <div class="kpi"><span class="k">Precio por producto</span><span class="v">${pct(ORD.filter((o) => o.prods.length === 1).length / S.n)}</span><span class="d">de los pedidos tienen un solo producto: precio exacto. En el resto se estima.</span></div>
         <div class="kpi"><span class="k">Clientes (por teléfono)</span><span class="v">${S.clientes.toLocaleString('es-PY')}</span><span class="d">${S.empresas.length} parecen empresas</span></div>
         <div class="kpi"><span class="k">Internos excluidos</span><span class="v">${S.internos.length}</span><span class="d">el cliente se llama igual que un vendedor</span></div>
@@ -890,14 +915,14 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
         <div class="card"><h2 class="sec">Pedidos por canal</h2>
           <div class="scroll"><table class="t num"><thead><tr><th>Canal</th><th class="r">Pedidos</th><th class="r">%</th></tr></thead><tbody>${Object.entries(S.porMkt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${v}</td><td class="r">${pct(v / S.n)}</td></tr>`).join('')}</tbody></table></div>
           <h2 class="sec">Actualizar o borrar</h2>
-          <label class="upload" for="fileOrd2" style="min-height:100px">Subir un Excel más nuevo<small>reemplaza el actual</small><input type="file" id="fileOrd2" accept=".xlsx,.xls,.csv"></label>
+          <label class="upload" for="fileOrd2" style="min-height:100px">Subir el Excel del día<small>si trae número de pedido, se suma sin duplicar; si no, reemplaza el actual</small><input type="file" id="fileOrd2" accept=".xlsx,.xls,.csv"></label>
           <button type="button" class="btn btn-bad" id="borrar">Borrar los datos de este dispositivo</button>
         </div>
       </div>
     </section>`;
   }
   wire.datos = () => {
-    $('fileOrd2').addEventListener('change', (e) => { ORD = []; render(); const inp = $('fileOrd'); const dt = new DataTransfer(); dt.items.add(e.target.files[0]); inp.files = dt.files; inp.dispatchEvent(new Event('change')); });
+    $('fileOrd2').addEventListener('change', (e) => { PREV = ORD; ORD = []; render(); const inp = $('fileOrd'); const dt = new DataTransfer(); dt.items.add(e.target.files[0]); inp.files = dt.files; inp.dispatchEvent(new Event('change')); });
     $('borrar').onclick = () => { store.del('mr-ord'); store.del('mr-res'); ORD = []; CL = []; OPS = []; resultados = {}; $('roles').hidden = true; $('dataTag').textContent = 'Sin datos cargados'; render(); toast('Datos borrados de este dispositivo'); };
   };
 
