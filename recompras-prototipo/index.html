@@ -1,0 +1,716 @@
+<title>Motor de Recompras</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Albert+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: barra de rol arriba, contenido en una columna en celular y dos columnas en escritorio; ficha de cliente como panel inferior */
+:root {
+  --bg: #f2f4f8;
+  --surface: #ffffff;
+  --surface-2: #e8ecf3;
+  --fg: #141a26;
+  --muted: #5d6679;
+  --line: #d8dee9;
+  --accent: #1f4fd1;
+  --accent-fg: #ffffff;
+  --accent-soft: #e1e8fb;
+  --ok: #187a4a; --ok-soft: #dbf2e5;
+  --warn: #a35c00; --warn-soft: #fcecd2;
+  --bad: #b42a2a; --bad-soft: #fbe2e2;
+  --ai: #7a3fb8; --ai-soft: #efe4fa;
+  --display: "Bricolage Grotesque", "Albert Sans", system-ui, sans-serif;
+  --body: "Albert Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e121a; --surface: #161c27; --surface-2: #202836; --fg: #e8ecf4; --muted: #9aa4b8; --line: #2b3445;
+    --accent: #7d9dff; --accent-fg: #0b1430; --accent-soft: #1c2747;
+    --ok: #5ccf92; --ok-soft: #133224; --warn: #f2b65a; --warn-soft: #3a2a10; --bad: #ff8d8d; --bad-soft: #3d1a1a;
+    --ai: #c79bf5; --ai-soft: #2c1f3d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e121a; --surface: #161c27; --surface-2: #202836; --fg: #e8ecf4; --muted: #9aa4b8; --line: #2b3445;
+  --accent: #7d9dff; --accent-fg: #0b1430; --accent-soft: #1c2747;
+  --ok: #5ccf92; --ok-soft: #133224; --warn: #f2b65a; --warn-soft: #3a2a10; --bad: #ff8d8d; --bad-soft: #3d1a1a;
+  --ai: #c79bf5; --ai-soft: #2c1f3d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45; -webkit-tap-highlight-color: transparent; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: var(--surface); border-bottom: 1px solid var(--line); padding-block: 10px; }
+header.top .wrap { display: grid; gap: 10px; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.2px; }
+.brand h1 span { color: var(--accent); }
+.proto { font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-soft); padding: 4px 10px; border-radius: 999px; }
+.roles { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.roles::-webkit-scrollbar { display: none; }
+.roles button { flex: none; border: 1.5px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 14px; min-height: 40px; }
+.roles button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.roles .lbl { flex: none; align-self: center; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; padding-right: 2px; }
+
+main { padding-block: 18px 60px; }
+.view { display: grid; gap: 18px; }
+h2.sec { margin: 0; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -.1px; text-wrap: balance; }
+.sub { margin: 0; color: var(--muted); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.grid2 { display: grid; gap: 18px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .grid2 { grid-template-columns: 1.35fr 1fr; align-items: start; } }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 2px; min-width: 0; }
+.kpi .k { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.kpi .v { font-family: var(--display); font-weight: 800; font-size: clamp(20px, 2.1vw, 24px); letter-spacing: -.3px; overflow-wrap: anywhere; }
+.kpi .d { font-size: 13px; color: var(--muted); }
+.kpi .d.up { color: var(--ok); } .kpi .d.down { color: var(--bad); }
+
+/* Barra de meta del vendedor */
+.goal { background: var(--fg); color: var(--bg); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; }
+.goal .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.goal .big { font-family: var(--display); font-weight: 800; font-size: 28px; }
+.goal .mut { opacity: .75; font-size: 13px; }
+.goal .track { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--bg) 22%, transparent); overflow: hidden; }
+.goal .fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
+.goal .stats { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 13px; }
+.goal .stats b { font-size: 15px; }
+
+/* Filtros chip */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; min-height: 36px; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+/* Tarjetas de cliente */
+.list { display: grid; gap: 10px; }
+.cli { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; text-align: left; width: 100%; }
+.cli:hover { border-color: var(--accent); }
+.cli.done { opacity: .6; }
+.cli .h { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+.cli .h > div { min-width: 0; }
+.cli .nm { font-weight: 700; font-size: 16px; }
+.cli .why { font-size: 14px; color: var(--muted); }
+.score { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-family: var(--display); font-weight: 800; font-size: 18px; line-height: 1; }
+.score small { font-family: var(--body); font-size: 10px; font-weight: 600; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.t-reposicion { background: var(--ok-soft); color: var(--ok); }
+.t-complemento { background: var(--accent-soft); color: var(--accent); }
+.t-reactivar { background: var(--warn-soft); color: var(--warn); }
+.t-ia { background: var(--ai-soft); color: var(--ai); }
+.t-bad { background: var(--bad-soft); color: var(--bad); }
+.cli .sug { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; font-size: 14px; }
+.cli .sug b { font-weight: 700; }
+
+/* Botones */
+.btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.btn-p { background: var(--accent); color: var(--accent-fg); }
+.btn-g { background: var(--surface-2); color: var(--fg); }
+.btn-ok { background: var(--ok); color: #fff; }
+.btn-bad { background: var(--bad-soft); color: var(--bad); }
+.btn-wa { background: #1f9d55; color: #fff; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Tabla */
+.scroll { overflow-x: auto; }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+table.t th, table.t td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.t th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
+table.t td.r, table.t th.r { text-align: right; }
+table.t tr:last-child td { border-bottom: 0; }
+
+/* Panel inferior (ficha) */
+.scrim { position: fixed; inset: 0; background: rgba(8, 12, 20, .45); z-index: 20; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow-y: auto;
+  background: var(--bg); border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,.25);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.sheet .in { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+.sheet .grab { width: 44px; height: 5px; background: var(--line); border-radius: 999px; margin: 0 auto 4px; }
+.sheet .hd { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.sheet .hd h3 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 800; }
+.x { border: 0; background: var(--surface-2); width: 40px; height: 40px; border-radius: 999px; font-size: 20px; flex: none; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.fact .k { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.fact .v { font-weight: 700; font-size: 16px; }
+.msg { width: 100%; min-height: 120px; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface); resize: vertical; font-size: 15px; }
+.timeline { display: grid; gap: 0; }
+.timeline .it { display: grid; grid-template-columns: 70px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.timeline .it:last-child { border-bottom: 0; }
+.timeline .it .dd { color: var(--muted); }
+.res { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.res button { min-height: 48px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-weight: 600; }
+.res button:hover { border-color: var(--accent); }
+.inline { display: grid; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field label, .lab { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+input[type=number], input[type=text], select { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-size: 15px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.warnbox { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); font-size: 14px; }
+.warnbox b { color: var(--warn); }
+.okbox { padding: 10px 12px; border-radius: 10px; background: var(--ok-soft); font-size: 14px; }
+.okbox b { color: var(--ok); }
+
+/* Ofertas */
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.offer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; display: grid; }
+.offer .art { aspect-ratio: 16 / 9; max-width: 100%; display: grid; place-items: center; text-align: center; padding: 12px; font-family: var(--display); font-weight: 800; font-size: 22px; color: #fff; line-height: 1.1; }
+.offer .art img { width: 100%; height: 100%; object-fit: cover; }
+.offer .bd { padding: 12px; display: grid; gap: 6px; }
+.offer .bd b { font-size: 15px; }
+.upload { border: 2px dashed var(--line); border-radius: var(--r); display: grid; place-items: center; text-align: center; padding: 18px; gap: 4px; font-weight: 700; min-height: 160px; cursor: pointer; background: var(--surface); }
+.upload small { font-weight: 400; color: var(--muted); }
+.upload input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+/* Aprobaciones */
+.appr { display: grid; gap: 10px; }
+.ap { background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--warn); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; }
+.ap.ok { border-left-color: var(--ok); } .ap.no { border-left-color: var(--bad); }
+.ap .h { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ap .meta { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; }
+
+.alert { display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.alert .dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; }
+.empty { text-align: center; color: var(--muted); padding: 20px; border: 1.5px dashed var(--line); border-radius: var(--r); }
+
+svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 999px; font-weight: 600; max-width: calc(100% - 32px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top gut"><div class="wrap">
+  <div class="brand">
+    <h1>Motor de <span>Recompras</span></h1>
+    <span class="proto">Prototipo · datos de ejemplo</span>
+  </div>
+  <div class="roles" role="toolbar" aria-label="Ver como">
+    <span class="lbl">Ver como</span>
+    <button type="button" data-role="vendedor" aria-pressed="true">Vendedor</button>
+    <button type="button" data-role="supervisor" aria-pressed="false">Supervisor</button>
+    <button type="button" data-role="marketing" aria-pressed="false">Marketing</button>
+    <button type="button" data-role="duenio" aria-pressed="false">Dueño</button>
+    <button type="button" data-role="reglas" aria-pressed="false">Reglas</button>
+  </div>
+</div></header>
+
+<main class="gut"><div class="wrap" id="app"></div></main>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><div class="in" id="sheetIn"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  // ===================== DATOS DE EJEMPLO =====================
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $$ = (n) => '$' + Math.round(n).toLocaleString('es-AR');
+  const pct = (n) => (Math.round(n * 1000) / 10).toLocaleString('es-AR') + '%';
+  const ME = 'Sofía Ríos';
+
+  const REGLAS = {
+    ciclos: [
+      { cat: 'Skincare', dias: 60, aviso: 7, nota: 'Sérums, cremas, protectores' },
+      { cat: 'Suplementos', dias: 30, aviso: 5, nota: 'Proteínas, vitaminas, colágeno' },
+      { cat: 'Perfumería', dias: 120, aviso: 10, nota: 'Fragancias 100 ml' },
+    ],
+    complementos: [
+      { si: 'Celulares', ofrecer: 'Funda, vidrio templado, cargador rápido', desde: 2, hasta: 10 },
+      { si: 'Notebooks', ofrecer: 'Mouse, mochila, hub USB-C', desde: 3, hasta: 14 },
+      { si: 'Skincare (limpieza)', ofrecer: 'Sérum o hidratante de la misma línea', desde: 7, hasta: 21 },
+    ],
+    inactivo: 150,
+    fatiga: 7,
+    topeDescVendedor: 0,
+  };
+
+  const MOTIVO = {
+    reposicion: { t: 'Reposición', c: 't-reposicion' },
+    complemento: { t: 'Complemento', c: 't-complemento' },
+    reactivar: { t: 'Reactivar', c: 't-reactivar' },
+    ia: { t: 'Sugerido por IA', c: 't-ia' },
+  };
+
+  const OFERTAS = [
+    { id: 'o1', titulo: '2x1 en Sérums', cat: 'Skincare', desc: 'Llevando 2 sérums de la línea Vit C, el segundo gratis.', descPct: 25, vence: '31/10', color: 'linear-gradient(135deg,#d9467a,#f29a5e)', usadas: 64, ventas: 41, ingresos: 2870000, costoDesc: 717500, margenNeto: 905000 },
+    { id: 'o2', titulo: '15% OFF Combo Proteína + Creatina', cat: 'Suplementos', desc: 'Combo de recompra para clientes de Whey 1 kg.', descPct: 15, vence: '15/11', color: 'linear-gradient(135deg,#1f7a5a,#5fc28f)', usadas: 88, ventas: 39, ingresos: 3510000, costoDesc: 526500, margenNeto: 1040000 },
+    { id: 'o3', titulo: 'Kit protección celular', cat: 'Celulares', desc: 'Funda + vidrio + cargador con 20% off los primeros 10 días.', descPct: 20, vence: '30/11', color: 'linear-gradient(135deg,#1f4fd1,#5aa0f0)', usadas: 120, ventas: 52, ingresos: 2340000, costoDesc: 468000, margenNeto: 1150000 },
+  ];
+
+  const clientes = [
+    { id: 'c1', nombre: 'Lucía Fernández', edad: 34, genero: 'F', tel: '11 5555-0101', motivo: 'reposicion', score: 92, prob: 0.62,
+      why: 'Compró Sérum Vitamina C 30 ml hace 54 días. Dura unos 60 días.', sug: { p: 'Sérum Vitamina C 30 ml', precio: 38900, margen: 0.48 }, oferta: 'o1',
+      ticket: 41200, ltv: 412000, compras: [[54, 'Sérum Vitamina C 30 ml', 38900], [112, 'Sérum Vitamina C 30 ml', 36500], [170, 'Protector solar FPS 50', 27900], [171, 'Gel limpiador facial', 18900]], contacto: null, hora: '18 a 20 h' },
+    { id: 'c2', nombre: 'Martín Gómez', edad: 28, genero: 'M', tel: '11 5555-0102', motivo: 'complemento', score: 88, prob: 0.55,
+      why: 'Compró Smartphone Galaxy A55 hace 3 días. No llevó funda ni vidrio.', sug: { p: 'Kit funda + vidrio templado', precio: 32900, margen: 0.62 }, oferta: 'o3',
+      ticket: 389000, ltv: 389000, compras: [[3, 'Smartphone Galaxy A55 256 GB', 589000]], contacto: null, hora: '12 a 14 h' },
+    { id: 'c3', nombre: 'Carolina Paz', edad: 41, genero: 'F', tel: '11 5555-0103', motivo: 'reposicion', score: 84, prob: 0.58,
+      why: 'Whey Protein 1 kg cada 31 días en promedio. Última compra hace 29 días.', sug: { p: 'Whey Protein 1 kg vainilla', precio: 45900, margen: 0.34 }, oferta: 'o2',
+      ticket: 47800, ltv: 626000, compras: [[29, 'Whey Protein 1 kg vainilla', 45900], [61, 'Whey Protein 1 kg vainilla', 43900], [90, 'Creatina 300 g', 24900], [92, 'Whey Protein 1 kg vainilla', 42900]], contacto: 20, hora: '8 a 10 h' },
+    { id: 'c4', nombre: 'Jorge Benítez', edad: 52, genero: 'M', tel: '11 5555-0104', motivo: 'ia', score: 79, prob: 0.31,
+      why: 'Perfil parecido a clientes que suman Colágeno después de comprar Magnesio (hombres 45 a 60, ticket medio).', sug: { p: 'Colágeno hidrolizado 300 g', precio: 29900, margen: 0.52 }, oferta: null,
+      ticket: 31500, ltv: 189000, compras: [[22, 'Magnesio citrato 60 caps', 18900], [80, 'Omega 3 120 caps', 26900], [140, 'Vitamina D3', 14900]], contacto: null, hora: '19 a 21 h' },
+    { id: 'c5', nombre: 'Valentina Ruiz', edad: 25, genero: 'F', tel: '11 5555-0105', motivo: 'reactivar', score: 71, prob: 0.18,
+      why: 'Clienta frecuente: 6 compras en 2025. Sin compras hace 168 días.', sug: { p: 'Protector solar FPS 50', precio: 27900, margen: 0.45 }, oferta: 'o1',
+      ticket: 35400, ltv: 212000, compras: [[168, 'Protector solar FPS 50', 26900], [230, 'Agua micelar 400 ml', 15900], [290, 'Sérum ácido hialurónico', 33900]], contacto: 95, hora: '20 a 22 h' },
+    { id: 'c6', nombre: 'Diego Sosa', edad: 36, genero: 'M', tel: '11 5555-0106', motivo: 'complemento', score: 68, prob: 0.40,
+      why: 'Compró Notebook 15" hace 6 días. Los clientes de notebooks suelen sumar mouse y mochila.', sug: { p: 'Mouse inalámbrico + mochila', precio: 54900, margen: 0.41 }, oferta: null,
+      ticket: 890000, ltv: 890000, compras: [[6, 'Notebook 15" i5 16 GB', 890000]], contacto: null, hora: '10 a 12 h' },
+    { id: 'c7', nombre: 'Romina Acosta', edad: 47, genero: 'F', tel: '11 5555-0107', motivo: 'ia', score: 63, prob: 0.27,
+      why: 'Compra skincare cada 2 meses y nunca probó perfumería. El 34% de clientas similares sí compra.', sug: { p: 'Fragancia floral 100 ml', precio: 79900, margen: 0.38 }, oferta: null,
+      ticket: 44800, ltv: 538000, compras: [[38, 'Crema antiage noche', 49900], [97, 'Crema antiage noche', 47900], [160, 'Contorno de ojos', 32900]], contacto: null, hora: '17 a 19 h' },
+    { id: 'c8', nombre: 'Pablo Medina', edad: 31, genero: 'M', tel: '11 5555-0108', motivo: 'reposicion', score: 57, prob: 0.44,
+      why: 'Multivitamínico de 60 días. Última compra hace 55 días. Contactado hace 3 días (no respondió).', sug: { p: 'Multivitamínico 60 caps', precio: 21900, margen: 0.50 }, oferta: null,
+      ticket: 22600, ltv: 135000, compras: [[55, 'Multivitamínico 60 caps', 21900], [118, 'Multivitamínico 60 caps', 20900]], contacto: 3, hora: '9 a 11 h' },
+  ];
+  clientes.forEach((c) => { c.estado = 'pendiente'; c.ge = c.prob * c.sug.precio * c.sug.margen; c.desc = null; });
+
+  const equipo = [
+    { n: 'Sofía Ríos', cartera: 3620, asign: 24, hechos: 0, ventas: 0, ing: 0, desc: 0, vencidos: 0, live: true, base: { hechos: 312, ventas: 74, ing: 4120000, meta: 6000000, desc: 0.061, vencidos: 18 } },
+    { n: 'Martín López', cartera: 3480, asign: 23, hechos: 21, ventas: 6, ing: 310000, desc: 0.048, vencidos: 9, base: { hechos: 401, ventas: 92, ing: 5260000, meta: 6000000, desc: 0.048, vencidos: 9 } },
+    { n: 'Carla Díaz', cartera: 3910, asign: 25, hechos: 14, ventas: 2, ing: 96000, desc: 0.112, vencidos: 64, base: { hechos: 228, ventas: 41, ing: 2390000, meta: 6000000, desc: 0.112, vencidos: 64 } },
+    { n: 'Diego Paredes', cartera: 3350, asign: 22, hechos: 22, ventas: 5, ing: 268000, desc: 0.052, vencidos: 12, base: { hechos: 389, ventas: 85, ing: 4870000, meta: 6000000, desc: 0.052, vencidos: 12 } },
+    { n: 'Paula Herrera', cartera: 3640, asign: 24, hechos: 9, ventas: 1, ing: 54000, desc: 0.035, vencidos: 41, base: { hechos: 196, ventas: 38, ing: 2050000, meta: 6000000, desc: 0.035, vencidos: 41 } },
+  ];
+
+  const aprobaciones = [
+    { id: 'a1', vend: 'Carla Díaz', cli: 'Gabriela Ortiz', prod: 'Fragancia amaderada 100 ml', precio: 89900, margen: 0.38, pct: 18, motivo: 'Dice que en otro sitio la consigue más barata', estado: 'pendiente' },
+    { id: 'a2', vend: 'Diego Paredes', cli: 'Hernán Vidal', prod: 'Combo Whey + Creatina', precio: 70800, margen: 0.34, pct: 8, motivo: 'Cliente de 14 compras, pide un beneficio por fidelidad', estado: 'pendiente' },
+  ];
+
+  // Semanas de ingresos por recompra (ejemplo)
+  const semanas = [2.1, 2.4, 2.2, 2.8, 3.1, 2.9, 3.4, 3.6, 3.3, 3.9, 4.2, 4.5].map((v) => v * 1e6);
+
+  // Población sintética de 18.000 clientes para que el armador de segmentos cuente de verdad
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const CATS = ['Skincare', 'Suplementos', 'Celulares', 'Perfumería', 'Notebooks', 'Accesorios'];
+  const PESOS = [0.30, 0.25, 0.15, 0.12, 0.06, 0.12];
+  const poblacion = Array.from({ length: 18000 }, () => {
+    let r = rnd(), cat = CATS[0];
+    for (let i = 0, a = 0; i < CATS.length; i++) { a += PESOS[i]; if (r <= a) { cat = CATS[i]; break; } }
+    const dias = Math.floor(Math.pow(rnd(), 1.6) * 540);
+    const ticket = Math.round(12000 + Math.pow(rnd(), 2.2) * 420000);
+    const edad = 18 + Math.floor(rnd() * 52);
+    const genero = rnd() < 0.61 ? 'F' : 'M';
+    const compras = 1 + Math.floor(Math.pow(rnd(), 2) * 20);
+    return { cat, dias, ticket, edad, genero, compras };
+  });
+
+  // ===================== ESTADO DE UI =====================
+  let role = 'vendedor';
+  let filtro = 'todos';
+  const seg = { cat: 'Skincare', diasMin: 45, diasMax: 120, ticketMin: 20000, edadMin: 18, edadMax: 70, genero: 'todos', comprasMin: 2 };
+  const ofertas = OFERTAS.slice();
+
+  function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2600); }
+
+  document.querySelectorAll('.roles button').forEach((b) => b.addEventListener('click', () => {
+    role = b.dataset.role;
+    document.querySelectorAll('.roles button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    render(); window.scrollTo(0, 0);
+  }));
+
+  function render() {
+    const app = $('app');
+    app.innerHTML = { vendedor: vVendedor, supervisor: vSupervisor, marketing: vMarketing, duenio: vDuenio, reglas: vReglas }[role]();
+    wire[role] && wire[role](app);
+  }
+
+  // ===================== VENDEDOR =====================
+  function miProgreso() {
+    const b = equipo[0].base;
+    const hoyV = clientes.filter((c) => c.estado === 'compro');
+    const ingHoy = hoyV.reduce((s, c) => s + c.sug.precio * (1 - (c.desc && c.desc.estado === 'aprobado' ? c.desc.pct / 100 : 0)), 0);
+    const hechos = clientes.filter((c) => c.estado !== 'pendiente').length;
+    return { ing: b.ing + ingHoy, meta: b.meta, hechos, ventasHoy: hoyV.length, ingHoy };
+  }
+
+  function vVendedor() {
+    const p = miProgreso();
+    const pend = clientes.filter((c) => c.estado === 'pendiente');
+    const geTotal = pend.reduce((s, c) => s + c.ge, 0);
+    const list = clientes.filter((c) => filtro === 'todos' || c.motivo === filtro).sort((a, b) => (a.estado === 'pendiente' ? 0 : 1) - (b.estado === 'pendiente' ? 0 : 1) || b.score - a.score);
+    const cnt = (m) => clientes.filter((c) => c.motivo === m && c.estado === 'pendiente').length;
+    return `<section class="view">
+      <div class="goal">
+        <div class="row"><div><div class="mut">Hola ${esc(ME.split(' ')[0])} · Recompras de octubre</div><div class="big num">${$$(p.ing)} <span class="mut">de ${$$(p.meta)}</span></div></div>
+        <div class="mut">Puesto <b style="font-size:18px">${datosEquipo().sort((a, b) => b.ing - a.ing).findIndex((v) => v.n === ME) + 1}º</b> de ${equipo.length} en el equipo</div></div>
+        <div class="track"><div class="fill" style="width:${Math.min(100, p.ing / p.meta * 100)}%"></div></div>
+        <div class="stats num"><span>Hoy: <b>${p.hechos}/${clientes.length}</b> contactados</span><span><b>${p.ventasHoy}</b> ventas (${$$(p.ingHoy)})</span><span>Te faltan <b>${$$(Math.max(0, p.meta - p.ing))}</b> en 7 días hábiles</span></div>
+      </div>
+
+      <div class="grid2">
+        <div class="view">
+          <div style="display:grid;gap:6px"><h2 class="sec">Tu lista de hoy</h2>
+          <p class="sub">Ordenada por chance de compra y ganancia esperada. Quedan ${pend.length} clientes, que pueden dejar <b class="num">${$$(geTotal)}</b> de ganancia.</p></div>
+          <div class="chips" role="group" aria-label="Filtrar lista">
+            ${[['todos', 'Todos', pend.length], ['reposicion', 'Reposición', cnt('reposicion')], ['complemento', 'Complemento', cnt('complemento')], ['reactivar', 'Reactivar', cnt('reactivar')], ['ia', 'IA', cnt('ia')]]
+              .map(([k, l, n]) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${filtro === k}">${l} · ${n}</button>`).join('')}
+          </div>
+          <div class="list">${list.map(cardCli).join('') || '<div class="empty">No hay clientes en este filtro.</div>'}</div>
+        </div>
+        <div class="view">
+          <div class="card">
+            <h2 class="sec">Ofertas vigentes de Marketing</h2>
+            <div class="list">${ofertas.slice(0, 3).map((o) => `<div class="tags" style="justify-content:space-between;align-items:center"><span><b>${esc(o.titulo)}</b><br><span class="note">${esc(o.cat)} · vence ${esc(o.vence)}</span></span><span class="tag t-complemento">-${o.descPct}%</span></div>`).join('')}</div>
+          </div>
+          <div class="card">
+            <h2 class="sec">Tus descuentos pedidos</h2>
+            ${(() => { const ds = clientes.filter((c) => c.desc); return ds.length ? ds.map((c) => `<div class="tags" style="justify-content:space-between"><span>${esc(c.nombre)} · ${c.desc.pct}%</span><span class="tag ${c.desc.estado === 'aprobado' ? 't-reposicion' : c.desc.estado === 'rechazado' ? 't-bad' : 't-reactivar'}">${c.desc.estado === 'pendiente' ? 'Esperando al dueño' : c.desc.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span></div>`).join('') : '<p class="note">Si un cliente pide un descuento que no está en las ofertas, pedilo desde su ficha. Lo aprueba el dueño.</p>'; })()}
+          </div>
+          <div class="card">
+            <h2 class="sec">Cómo se arma tu lista</h2>
+            <p class="note"><b>Reposición:</b> se le está por terminar un producto (skincare, suplementos).<br><b>Complemento:</b> compró algo hace pocos días y le falta el accesorio.<br><b>Reactivar:</b> era frecuente y dejó de comprar.<br><b>IA:</b> clientes parecidos compraron ese producto.<br>No aparecen clientes contactados en los últimos ${REGLAS.fatiga} días, para no saturarlos.</p>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  function cardCli(c) {
+    const m = MOTIVO[c.motivo];
+    const of = c.oferta ? ofertas.find((o) => o.id === c.oferta) : null;
+    const est = { compro: ['Compró', 't-reposicion'], no_contesta: ['No contesta', 't-reactivar'], no_interesa: ['No le interesa', 't-bad'], volver: ['Volver a llamar', 't-complemento'] }[c.estado];
+    return `<button type="button" class="cli ${c.estado !== 'pendiente' ? 'done' : ''}" data-cli="${c.id}">
+      <div class="h"><div><div class="nm">${esc(c.nombre)}</div><div class="why">${esc(c.why)}</div></div>
+      <div class="score num" title="Puntaje de prioridad">${c.score}<small>puntos</small></div></div>
+      <div class="tags"><span class="tag ${m.c}">${m.t}</span>${of ? `<span class="tag">Oferta: ${esc(of.titulo)}</span>` : ''}${c.contacto != null && c.contacto <= REGLAS.fatiga ? '<span class="tag t-reactivar">Contactado hace ' + c.contacto + ' días</span>' : ''}${est ? `<span class="tag ${est[1]}">${est[0]}</span>` : ''}</div>
+      <div class="sug num"><span>Ofrecer: <b>${esc(c.sug.p)}</b></span><span>${$$(c.sug.precio)} · chance ${Math.round(c.prob * 100)}%</span></div>
+    </button>`;
+  }
+
+  function mensaje(c) {
+    const of = c.oferta ? ofertas.find((o) => o.id === c.oferta) : null;
+    const nom = c.nombre.split(' ')[0];
+    const base = {
+      reposicion: `¡Hola ${nom}! Soy ${ME.split(' ')[0]}. Calculo que ya se te está terminando el ${c.sug.p.toLowerCase()}. ¿Querés que te lo reserve?`,
+      complemento: `¡Hola ${nom}! Soy ${ME.split(' ')[0]}. ¿Cómo te está yendo con tu compra? Para cuidarla te recomiendo el ${c.sug.p.toLowerCase()}.`,
+      reactivar: `¡Hola ${nom}! Soy ${ME.split(' ')[0]}. Hace tiempo que no te vemos y queríamos contarte que el ${c.sug.p.toLowerCase()} que llevabas está disponible.`,
+      ia: `¡Hola ${nom}! Soy ${ME.split(' ')[0]}. Por lo que venís comprando, creo que te puede servir el ${c.sug.p.toLowerCase()}. ¿Te cuento?`,
+    }[c.motivo];
+    return base + (of ? ` Esta semana tenemos ${of.titulo.toLowerCase()} (vence el ${of.vence}).` : '');
+  }
+
+  function abrirFicha(id) {
+    const c = clientes.find((x) => x.id === id);
+    const of = c.oferta ? ofertas.find((o) => o.id === c.oferta) : null;
+    const freq = c.compras.length > 1 ? Math.round((c.compras[c.compras.length - 1][0] - c.compras[0][0]) / (c.compras.length - 1)) : null;
+    const tel = '549' + c.tel.replace(/\D/g, '');
+    const fatiga = c.contacto != null && c.contacto <= REGLAS.fatiga;
+    $('sheetIn').innerHTML = `
+      <div class="grab"></div>
+      <div class="hd"><div><h3 id="sheetTitle">${esc(c.nombre)}</h3><p class="sub">${c.edad} años · ${c.genero === 'F' ? 'Mujer' : 'Hombre'} · ${esc(c.tel)} · mejor horario ${esc(c.hora)}</p></div><button type="button" class="x" data-close aria-label="Cerrar">×</button></div>
+      <div class="tags"><span class="tag ${MOTIVO[c.motivo].c}">${MOTIVO[c.motivo].t}</span><span class="tag">Puntaje ${c.score}</span>${fatiga ? '<span class="tag t-reactivar">Contactado hace ' + c.contacto + ' días</span>' : ''}</div>
+      ${fatiga ? `<div class="warnbox"><b>Ojo:</b> lo contactaste hace ${c.contacto} días. Si no respondió, probá en otro horario (${esc(c.hora)}) o dejalo para la semana que viene.</div>` : ''}
+      <div class="facts num">
+        <div class="fact"><div class="k">Ticket promedio</div><div class="v">${$$(c.ticket)}</div></div>
+        <div class="fact"><div class="k">Compró en total</div><div class="v">${$$(c.ltv)}</div></div>
+        <div class="fact"><div class="k">Compras</div><div class="v">${c.compras.length}</div></div>
+        <div class="fact"><div class="k">Compra cada</div><div class="v">${freq ? freq + ' días' : '—'}</div></div>
+      </div>
+      <div class="card">
+        <span class="lab">Por qué hoy</span>
+        <div>${esc(c.why)}</div>
+        <div class="sug num" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:10px">
+          <span>Ofrecer <b>${esc(c.sug.p)}</b></span><span>${$$(c.sug.precio)} · margen ${Math.round(c.sug.margen * 100)}% · ganancia esperada ${$$(c.ge)}</span></div>
+        ${of ? `<div class="okbox"><b>Oferta aplicable:</b> ${esc(of.titulo)}. ${esc(of.desc)}</div>` : '<p class="note">No hay oferta de Marketing para este producto. Si el cliente pide descuento, pedí aprobación abajo.</p>'}
+      </div>
+      <div class="card">
+        <span class="lab">Mensaje sugerido (lo podés editar)</span>
+        <textarea class="msg" id="msgTxt">${esc(mensaje(c))}</textarea>
+        <div class="btns">
+          <a class="btn btn-wa" id="waLink" href="https://wa.me/${tel}?text=${encodeURIComponent(mensaje(c))}" target="_blank" rel="noopener">Abrir WhatsApp</a>
+          <button type="button" class="btn btn-g" id="copyMsg">Copiar mensaje</button>
+        </div>
+        <p class="note">En el prototipo el número es de ejemplo. En el sistema real se abre el chat del cliente.</p>
+      </div>
+      <div class="card">
+        <span class="lab">¿Cómo te fue?</span>
+        <div class="res">
+          <button type="button" data-res="compro">✔ Compró</button>
+          <button type="button" data-res="volver">Volver a llamar</button>
+          <button type="button" data-res="no_contesta">No contesta</button>
+          <button type="button" data-res="no_interesa">No le interesa</button>
+        </div>
+      </div>
+      <div class="card">
+        <span class="lab">Descuento especial</span>
+        ${c.desc ? `<div class="${c.desc.estado === 'aprobado' ? 'okbox' : 'warnbox'}"><b>${c.desc.pct}% pedido:</b> ${c.desc.estado === 'pendiente' ? 'esperando aprobación del dueño.' : c.desc.estado === 'aprobado' ? 'aprobado. Ya lo podés ofrecer.' : 'rechazado.'}</div>` : `
+        <div class="row2">
+          <div class="field"><label for="dPct">Porcentaje</label><input type="number" id="dPct" min="1" max="50" value="10" inputmode="numeric"></div>
+          <div class="field"><label for="dMot">Motivo</label><input type="text" id="dMot" placeholder="Ej: lo vio más barato en otro sitio"></div>
+        </div>
+        <p class="note num" id="dImpact"></p>
+        <button type="button" class="btn btn-g" id="dSend">Pedir aprobación al dueño</button>`}
+      </div>
+      <div class="card">
+        <span class="lab">Historial de compras</span>
+        <div class="timeline num">${c.compras.map(([d, p, m]) => `<div class="it"><span class="dd">hace ${d} d</span><span>${esc(p)}</span><b>${$$(m)}</b></div>`).join('')}</div>
+      </div>`;
+    $('sheet').hidden = false; $('scrim').hidden = false;
+    const s = $('sheetIn');
+    s.querySelector('[data-close]').onclick = cerrarFicha;
+    const ta = $('msgTxt');
+    ta.addEventListener('input', () => { $('waLink').href = `https://wa.me/${tel}?text=${encodeURIComponent(ta.value)}`; });
+    $('copyMsg').onclick = () => { navigator.clipboard.writeText(ta.value).then(() => toast('Mensaje copiado'), () => { ta.select(); toast('Seleccioná y copiá el texto'); }); };
+    s.querySelectorAll('[data-res]').forEach((b) => b.onclick = () => {
+      c.estado = b.dataset.res;
+      cerrarFicha(); render();
+      toast(c.estado === 'compro' ? '¡Venta registrada! Sumó a tu meta' : 'Resultado guardado');
+    });
+    if (!c.desc) {
+      const upd = () => {
+        const p = Math.max(0, Math.min(50, Number($('dPct').value) || 0)) / 100;
+        const gan = c.sug.precio * c.sug.margen, ganD = c.sug.precio * (c.sug.margen - p);
+        $('dImpact').innerHTML = `Con ${Math.round(p * 100)}% la ganancia de esta venta baja de <b>${$$(gan)}</b> a <b>${$$(ganD)}</b>${ganD <= 0 ? ' <b style="color:var(--bad)">(pierde plata)</b>' : ''}.`;
+      };
+      $('dPct').addEventListener('input', upd); upd();
+      $('dSend').onclick = () => {
+        const pctv = Math.max(1, Math.min(50, Number($('dPct').value) || 0));
+        c.desc = { pct: pctv, estado: 'pendiente' };
+        aprobaciones.unshift({ id: 'a-' + c.id, vend: ME, cli: c.nombre, prod: c.sug.p, precio: c.sug.precio, margen: c.sug.margen, pct: pctv, motivo: $('dMot').value.trim() || 'Sin motivo', estado: 'pendiente', ref: c.id });
+        abrirFicha(c.id); toast('Pedido enviado. Miralo en la vista Dueño');
+      };
+    }
+  }
+  function cerrarFicha() { $('sheet').hidden = true; $('scrim').hidden = true; }
+  $('scrim').addEventListener('click', cerrarFicha);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarFicha(); });
+
+  const wire = {
+    vendedor(app) {
+      app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { filtro = b.dataset.f; render(); });
+      app.querySelectorAll('[data-cli]').forEach((b) => b.onclick = () => abrirFicha(b.dataset.cli));
+    },
+  };
+
+  // ===================== SUPERVISOR =====================
+  function datosEquipo() {
+    const p = miProgreso();
+    return equipo.map((v) => v.live ? { ...v.base, n: v.n, cartera: v.cartera, ing: p.ing, hechos: v.base.hechos + p.hechos, ventas: v.base.ventas + p.ventasHoy } : { ...v.base, n: v.n, cartera: v.cartera });
+  }
+  function vSupervisor() {
+    const eq = datosEquipo();
+    const tot = eq.reduce((a, v) => ({ ing: a.ing + v.ing, meta: a.meta + v.meta, hechos: a.hechos + v.hechos, ventas: a.ventas + v.ventas, venc: a.venc + v.vencidos }), { ing: 0, meta: 0, hechos: 0, ventas: 0, venc: 0 });
+    return `<section class="view">
+      <div style="display:grid;gap:6px"><h2 class="sec">Equipo de recompras · octubre</h2><p class="sub">Cada vendedor trabaja la cartera de clientes a los que les vendió. Vos ves a todos.</p></div>
+      <div class="kpis num">
+        <div class="kpi"><span class="k">Recompras del mes</span><span class="v">${$$(tot.ing)}</span><span class="d">${pct(tot.ing / tot.meta)} de la meta de ${$$(tot.meta)}</span></div>
+        <div class="kpi"><span class="k">Contactos hechos</span><span class="v">${tot.hechos.toLocaleString('es-AR')}</span><span class="d">${tot.ventas} ventas</span></div>
+        <div class="kpi"><span class="k">Conversión</span><span class="v">${pct(tot.ventas / tot.hechos)}</span><span class="d">ventas ÷ contactos</span></div>
+        <div class="kpi"><span class="k">Oportunidades vencidas</span><span class="v" style="color:var(--bad)">${tot.venc}</span><span class="d down">clientes que debían contactarse y nadie llamó</span></div>
+      </div>
+      <div class="card">
+        <h2 class="sec">Ranking</h2>
+        <div class="scroll"><table class="t num">
+          <thead><tr><th>Vendedor</th><th class="r">Cartera</th><th class="r">Contactos</th><th class="r">Conversión</th><th class="r">Recompras</th><th class="r">Meta</th><th class="r">Desc. promedio</th><th class="r">Vencidas</th></tr></thead>
+          <tbody>${eq.slice().sort((a, b) => b.ing - a.ing).map((v, i) => `<tr>
+            <td><b>${i + 1}. ${esc(v.n)}</b>${v.n === ME ? ' <span class="tag t-complemento">en vivo</span>' : ''}</td>
+            <td class="r">${v.cartera.toLocaleString('es-AR')}</td><td class="r">${v.hechos}</td><td class="r">${pct(v.ventas / v.hechos)}</td>
+            <td class="r"><b>${$$(v.ing)}</b></td><td class="r">${pct(v.ing / v.meta)}</td>
+            <td class="r" style="color:${v.desc > 0.08 ? 'var(--bad)' : 'inherit'}">${pct(v.desc)}</td>
+            <td class="r" style="color:${v.vencidos > 30 ? 'var(--bad)' : 'inherit'}">${v.vencidos}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2 class="sec">Alertas para actuar hoy</h2>
+        <div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>Carla Díaz:</b> 64 oportunidades vencidas y descuento promedio de 11,2%, el doble que el resto. Vende menos y regala más margen. Revisá con ella su lista diaria.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>Paula Herrera:</b> hizo 9 de 24 contactos hoy. Si sigue así, queda al 34% de la meta.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--ok)"></span><div><b>Martín López:</b> mejor conversión del equipo (22,9%). Sus mensajes de complemento de celulares sirven de ejemplo para el resto.</div></div>
+      </div>
+    </section>`;
+  }
+
+  // ===================== MARKETING =====================
+  function contarSeg() {
+    return poblacion.filter((p) => (seg.cat === 'todas' || p.cat === seg.cat) && p.dias >= seg.diasMin && p.dias <= seg.diasMax && p.ticket >= seg.ticketMin
+      && p.edad >= seg.edadMin && p.edad <= seg.edadMax && (seg.genero === 'todos' || p.genero === seg.genero) && p.compras >= seg.comprasMin);
+  }
+  function vMarketing() {
+    const r = contarSeg();
+    const tk = r.length ? r.reduce((s, p) => s + p.ticket, 0) / r.length : 0;
+    const totIng = ofertas.reduce((s, o) => s + (o.ingresos || 0), 0), totDesc = ofertas.reduce((s, o) => s + (o.costoDesc || 0), 0);
+    return `<section class="view">
+      <div style="display:grid;gap:6px"><h2 class="sec">Biblioteca de ofertas</h2><p class="sub">Lo que subas acá lo ven los vendedores en su lista y en la ficha de cada cliente.</p></div>
+      <div class="offers">
+        ${ofertas.map((o) => `<div class="offer"><div class="art" style="background:${o.img ? 'var(--surface-2)' : o.color}">${o.img ? `<img src="${o.img}" alt="${esc(o.titulo)}">` : esc(o.titulo)}</div>
+          <div class="bd"><b>${esc(o.titulo)}</b><span class="note">${esc(o.desc)}</span><div class="tags"><span class="tag">${esc(o.cat)}</span><span class="tag t-complemento">-${o.descPct}%</span><span class="tag">vence ${esc(o.vence)}</span></div></div></div>`).join('')}
+        <label class="upload" for="upFile">Subir material nuevo<small>Imagen o PDF de la oferta</small><input type="file" id="upFile" accept="image/*,.pdf"></label>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2 class="sec">Armar un segmento</h2>
+          <p class="note">Probalo: cambiá los filtros y el conteo se recalcula sobre 18.000 clientes de ejemplo.</p>
+          <div class="row2">
+            <div class="field"><label for="sCat">Compró en</label><select id="sCat">${['todas', ...CATS].map((c) => `<option value="${c}" ${seg.cat === c ? 'selected' : ''}>${c === 'todas' ? 'Todas las categorías' : c}</option>`).join('')}</select></div>
+            <div class="field"><label for="sGen">Género</label><select id="sGen"><option value="todos">Todos</option><option value="F" ${seg.genero === 'F' ? 'selected' : ''}>Mujeres</option><option value="M" ${seg.genero === 'M' ? 'selected' : ''}>Hombres</option></select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sDmin">Días sin comprar, desde</label><input type="number" id="sDmin" value="${seg.diasMin}" min="0"></div>
+            <div class="field"><label for="sDmax">hasta</label><input type="number" id="sDmax" value="${seg.diasMax}" min="0"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sEmin">Edad desde</label><input type="number" id="sEmin" value="${seg.edadMin}"></div>
+            <div class="field"><label for="sEmax">hasta</label><input type="number" id="sEmax" value="${seg.edadMax}"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sTk">Ticket promedio mínimo ($)</label><input type="number" id="sTk" value="${seg.ticketMin}" step="1000"></div>
+            <div class="field"><label for="sCm">Compras mínimas</label><input type="number" id="sCm" value="${seg.comprasMin}" min="1"></div>
+          </div>
+          <div class="okbox num" id="segOut"><b>${r.length.toLocaleString('es-AR')} clientes</b> en el segmento · ticket promedio ${$$(tk)}</div>
+          <button type="button" class="btn btn-p" id="segSave">Guardar segmento</button>
+        </div>
+        <div class="card">
+          <h2 class="sec">Resultados por oferta</h2>
+          <p class="note">La oferta vale si la ganancia que deja es mayor que lo que regala en descuento.</p>
+          <div class="scroll"><table class="t num">
+            <thead><tr><th>Oferta</th><th class="r">Ventas</th><th class="r">Ingresos</th><th class="r">Descuento</th><th class="r">Ganancia neta</th><th class="r">Retorno</th></tr></thead>
+            <tbody>${ofertas.filter((o) => o.ventas != null).map((o) => `<tr><td>${esc(o.titulo)}</td><td class="r">${o.ventas}</td><td class="r">${$$(o.ingresos)}</td><td class="r">${$$(o.costoDesc)}</td><td class="r"><b>${$$(o.margenNeto)}</b></td><td class="r">${(o.margenNeto / o.costoDesc).toFixed(1).replace('.', ',')}x</td></tr>`).join('')}</tbody>
+          </table></div>
+          <div class="warnbox num"><b>Para revisar:</b> el 2x1 en sérums regala ${pct(OFERTAS[0].costoDesc / OFERTAS[0].ingresos)} de lo que vende. Es la que menos ganancia deja por cada peso de descuento.</div>
+          <p class="note num">Total del mes: ${$$(totIng)} vendidos con ofertas y ${$$(totDesc)} regalados en descuentos.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+  wire.marketing = (app) => {
+    const map = { sCat: 'cat', sGen: 'genero', sDmin: 'diasMin', sDmax: 'diasMax', sEmin: 'edadMin', sEmax: 'edadMax', sTk: 'ticketMin', sCm: 'comprasMin' };
+    Object.entries(map).forEach(([id, k]) => $(id).addEventListener('input', () => {
+      const v = $(id).value; seg[k] = ['cat', 'genero'].includes(k) ? v : Number(v) || 0;
+      const r = contarSeg(); const tk = r.length ? r.reduce((s, p) => s + p.ticket, 0) / r.length : 0;
+      $('segOut').innerHTML = `<b>${r.length.toLocaleString('es-AR')} clientes</b> en el segmento · ticket promedio ${$$(tk)}`;
+    }));
+    $('segSave').onclick = () => toast('Segmento guardado (en el prototipo no se guarda de verdad)');
+    $('upFile').addEventListener('change', (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const add = (img) => { ofertas.unshift({ id: 'u' + Date.now(), titulo: f.name.replace(/\.[^.]+$/, ''), cat: 'Nueva', desc: 'Material subido recién. Completá la descripción y la vigencia.', descPct: 0, vence: '—', color: 'linear-gradient(135deg,#444c5e,#7a8399)', img }); render(); toast('Material subido. Ya lo ven los vendedores'); };
+      if (f.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => add(rd.result); rd.readAsDataURL(f); } else add(null);
+    });
+  };
+
+  // ===================== DUEÑO =====================
+  function chart() {
+    const W = 640, H = 220, pl = 46, pr = 10, pt = 14, pb = 28;
+    const max = 5e6, bw = (W - pl - pr) / semanas.length;
+    const y = (v) => pt + (H - pt - pb) * (1 - v / max);
+    const ticks = [0, 1e6, 2e6, 3e6, 4e6, 5e6];
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Ingresos por recompra, últimas 12 semanas">
+      ${ticks.map((t) => `<line x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${y(t) + 4}" text-anchor="end">${t / 1e6}M</text>`).join('')}
+      ${semanas.map((v, i) => `<rect x="${pl + i * bw + bw * 0.18}" y="${y(v)}" width="${bw * 0.64}" height="${y(0) - y(v)}" rx="4" fill="${i === semanas.length - 1 ? 'var(--accent)' : 'var(--accent-soft)'}"/>
+        <text x="${pl + i * bw + bw / 2}" y="${H - 8}" text-anchor="middle">S${i + 1}</text>`).join('')}
+      <text x="${pl + 11 * bw + bw / 2}" y="${y(semanas[11]) - 6}" text-anchor="middle" style="fill:var(--fg);font-weight:700">${(semanas[11] / 1e6).toFixed(1).replace('.', ',')}M</text>
+    </svg>`;
+  }
+  function vDuenio() {
+    const pend = aprobaciones.filter((a) => a.estado === 'pendiente');
+    const eq = datosEquipo();
+    const ing = eq.reduce((s, v) => s + v.ing, 0);
+    return `<section class="view">
+      <div style="display:grid;gap:6px"><h2 class="sec">Tablero del dueño</h2><p class="sub">Cuánta plata genera la recompra, cuánto margen se regala y qué está en riesgo.</p></div>
+      <div class="kpis num">
+        <div class="kpi"><span class="k">Ingresos por recompra (mes)</span><span class="v">${$$(ing)}</span><span class="d up">+18% vs. septiembre</span></div>
+        <div class="kpi"><span class="k">Ganancia bruta de recompras</span><span class="v">${$$(ing * 0.41)}</span><span class="d">margen 41% después de descuentos</span></div>
+        <div class="kpi"><span class="k">Tasa de recompra 90 días</span><span class="v">27,4%</span><span class="d up">+3,1 puntos en 3 meses</span></div>
+        <div class="kpi"><span class="k">Descuento sobre ventas</span><span class="v">6,8%</span><span class="d down">subió desde 5,2%</span></div>
+        <div class="kpi"><span class="k">Clientes en riesgo</span><span class="v">2.140</span><span class="d down">frecuentes con más de 150 días sin comprar</span></div>
+        <div class="kpi"><span class="k">Valor en riesgo (12 meses)</span><span class="v">${$$(2140 * 35400 * 2.4)}</span><span class="d">si no vuelven a comprar</span></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2 class="sec">Ingresos por recompra, últimas 12 semanas</h2>
+          <div class="scroll" style="min-width:0">${chart()}</div>
+          <p class="note">Valores de ejemplo. En el sistema real salen de los pedidos que se suben cada día.</p>
+        </div>
+        <div class="card">
+          <h2 class="sec">Descuentos para aprobar · ${pend.length}</h2>
+          <div class="appr">${aprobaciones.map(cardAp).join('') || '<div class="empty">No hay pedidos.</div>'}</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="sec">Lo que el sistema te avisa</h2>
+        <div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>El descuento crece más rápido que las ventas.</b> Las recompras subieron 18% y el descuento promedio pasó de 5,2% a 6,8%. Una parte del crecimiento la estás pagando con margen.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>Suplementos tiene el margen más bajo (34%).</b> Es la categoría que más recompra, así que conviene empujar combos con creatina o colágeno, que dejan más margen.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--ok)"></span><div><b>Los complementos de celulares rinden.</b> 62% de margen y 43% de conversión en los primeros 10 días después de la compra.</div></div>
+      </div>
+    </section>`;
+  }
+  function cardAp(a) {
+    const gan = a.precio * a.margen, ganD = a.precio * (a.margen - a.pct / 100);
+    const cls = a.estado === 'aprobado' ? 'ok' : a.estado === 'rechazado' ? 'no' : '';
+    return `<div class="ap ${cls}">
+      <div class="h"><b>${esc(a.vend)} → ${esc(a.cli)}</b><span class="tag ${a.estado === 'pendiente' ? 't-reactivar' : a.estado === 'aprobado' ? 't-reposicion' : 't-bad'}">${a.estado === 'pendiente' ? 'Pendiente' : a.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span></div>
+      <div class="meta num"><span>${esc(a.prod)} · ${$$(a.precio)}</span><span>Pide <b>${a.pct}%</b></span><span>Ganancia: ${$$(gan)} → <b style="color:${ganD < gan * 0.5 ? 'var(--bad)' : 'inherit'}">${$$(ganD)}</b></span></div>
+      <div class="note">“${esc(a.motivo)}”</div>
+      ${a.estado === 'pendiente' ? `<div class="btns"><button type="button" class="btn btn-ok" data-ap="${a.id}" data-v="aprobado">Aprobar</button><button type="button" class="btn btn-bad" data-ap="${a.id}" data-v="rechazado">Rechazar</button></div>` : ''}
+    </div>`;
+  }
+  wire.duenio = (app) => {
+    app.querySelectorAll('[data-ap]').forEach((b) => b.onclick = () => {
+      const a = aprobaciones.find((x) => x.id === b.dataset.ap); a.estado = b.dataset.v;
+      if (a.ref) { const c = clientes.find((x) => x.id === a.ref); if (c && c.desc) c.desc.estado = a.estado; }
+      render(); toast(a.estado === 'aprobado' ? 'Aprobado. El vendedor ya lo ve' : 'Rechazado. El vendedor ya lo ve');
+    });
+  };
+
+  // ===================== REGLAS =====================
+  function vReglas() {
+    return `<section class="view">
+      <div style="display:grid;gap:6px"><h2 class="sec">Reglas del motor</h2><p class="sub">Así decide el sistema a quién contactar cada día. Las edita el dueño o Marketing.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h2 class="sec">Reposición: cuánto dura cada producto</h2>
+          <div class="scroll"><table class="t">
+            <thead><tr><th>Categoría</th><th>Dura (días)</th><th>Avisar antes (días)</th><th>Incluye</th></tr></thead>
+            <tbody>${REGLAS.ciclos.map((r, i) => `<tr><td><b>${esc(r.cat)}</b></td><td><input type="number" data-ciclo="${i}" data-k="dias" value="${r.dias}" style="max-width:90px" aria-label="Días de duración ${esc(r.cat)}"></td><td><input type="number" data-ciclo="${i}" data-k="aviso" value="${r.aviso}" style="max-width:90px" aria-label="Días de aviso ${esc(r.cat)}"></td><td class="note">${esc(r.nota)}</td></tr>`).join('')}</tbody>
+          </table></div>
+          <p class="note">Cuando el sistema tenga suficiente historial, usa la frecuencia real de cada cliente en lugar del promedio de la categoría.</p>
+        </div>
+        <div class="card">
+          <h2 class="sec">Complementos: compró A, ofrecer B</h2>
+          <div class="list">${REGLAS.complementos.map((r) => `<div class="inline"><b>Si compró ${esc(r.si)}</b><span>Ofrecer: ${esc(r.ofrecer)}</span><span class="note">Contactar entre el día ${r.desde} y el día ${r.hasta} después de la compra</span></div>`).join('')}</div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2 class="sec">Reactivación y cuidado del cliente</h2>
+          <div class="field"><label for="rInact">Considerar inactivo después de (días)</label><input type="number" id="rInact" value="${REGLAS.inactivo}"></div>
+          <div class="field"><label for="rFat">No volver a contactar antes de (días)</label><input type="number" id="rFat" value="${REGLAS.fatiga}"></div>
+          <div class="field"><label for="rDesc">Descuento que el vendedor puede dar sin aprobación</label><input type="number" id="rDesc" value="${REGLAS.topeDescVendedor}" disabled><span class="note">0%: solo ofertas de Marketing. Cualquier otro descuento lo aprueba el dueño.</span></div>
+        </div>
+        <div class="card">
+          <h2 class="sec">Predicción con IA <span class="tag t-ia">Etapa 2</span></h2>
+          <p class="note">Con 3 a 6 meses de pedidos, el sistema aprende qué compran los clientes parecidos y sugiere el próximo producto.</p>
+          <div class="list">
+            <div class="inline"><b>Usa</b><span class="note">Historial de compras, frecuencia, ticket promedio, categorías, edad, género, época del año y respuesta a ofertas anteriores.</span></div>
+            <div class="inline"><b>Da</b><span class="note">Producto sugerido, chance de compra y ganancia esperada por cliente. Así la lista prioriza lo que deja más plata, no lo que más factura.</span></div>
+            <div class="inline"><b>Se controla</b><span class="note">Cada mes se compara contra un grupo de clientes que no recibió la sugerencia, para medir cuánto vende de más de verdad.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+  wire.reglas = (app) => {
+    app.querySelectorAll('[data-ciclo]').forEach((inp) => inp.addEventListener('change', () => { REGLAS.ciclos[+inp.dataset.ciclo][inp.dataset.k] = Number(inp.value) || 0; toast('Regla actualizada'); }));
+    $('rInact').addEventListener('change', (e) => { REGLAS.inactivo = Number(e.target.value) || 0; toast('Regla actualizada'); });
+    $('rFat').addEventListener('change', (e) => { REGLAS.fatiga = Number(e.target.value) || 0; toast('Regla actualizada'); });
+  };
+
+  render();
+})();
+</script>
