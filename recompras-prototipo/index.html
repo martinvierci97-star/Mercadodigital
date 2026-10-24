@@ -327,9 +327,23 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
   function procesar() {
     ORD.sort((a, b) => a.f - b.f);
     const vendNames = new Set(ORD.map((o) => norm(o.vend)).filter(Boolean));
+    // Pedidos sin vendedor: los vendió la web o un marketplace
+    ORD.forEach((o) => { o.auto = !o.vend; o.vendera = o.vend || (o.mkt === 'Mercado Digital' ? 'Web directa' : o.mkt); });
+    // Precio por producto: exacto si el pedido tiene un solo producto; si tiene varios, se reparte el total
+    // según el precio de cada producto cuando se vendió solo (estimado)
+    const ref = {};
+    ORD.forEach((o) => { if (o.prods.length === 1) { const k = norm(o.prods[0].n); (ref[k] ||= []).push(o.total / o.prods[0].q); } });
+    const med = (a) => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const refP = {}; for (const [k, a] of Object.entries(ref)) refP[k] = med(a);
+    ORD.forEach((o) => {
+      if (o.prods.length === 1) { o.prods[0].pu = o.total / o.prods[0].q; o.prods[0].est = false; return; }
+      const w = o.prods.map((p) => (refP[norm(p.n)] || 0) * p.q);
+      const sw = w.reduce((s, x) => s + x, 0);
+      o.prods.forEach((p, i) => { p.pu = sw > 0 && w.every((x) => x > 0) ? (o.total * w[i] / sw) / p.q : o.total / o.prods.reduce((s, x) => s + x.q, 0); p.est = true; });
+    });
     // Producto más vendido por categoría (para sugerir algo concreto)
     const pc = {};
-    ORD.forEach((o) => { const p = o.prods[0]; if (EMPRESA.test(o.cli) || o.prods.reduce((s, x) => s + x.q, 0) > 3) return; if (!p) return; const k = norm(o.cat); const n = p.n; (pc[k] ||= {}); (pc[k][n] ||= { c: 0, sum: 0 }); pc[k][n].c += 1; pc[k][n].sum += o.total / Math.max(1, o.prods.reduce((s, x) => s + x.q, 0)); });
+    ORD.forEach((o) => { const p = o.prods[0]; if (!p || EMPRESA.test(o.cli) || o.prods.reduce((s, x) => s + x.q, 0) > 3) return; const k = norm(o.cat); const n = p.n; (pc[k] ||= {}); (pc[k][n] ||= { c: 0, sum: 0 }); pc[k][n].c += 1; pc[k][n].sum += p.pu; });
     TOP = {};
     for (const [k, m] of Object.entries(pc)) { const best = Object.entries(m).sort((a, b) => b[1].c - a[1].c)[0]; TOP[k] = { prod: best[0], precio: best[1].sum / best[1].c, ventas: best[1].c }; }
 
@@ -338,7 +352,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     CL = [];
     for (const [tel, os] of by) {
       const last = os[os.length - 1];
-      const vendedor = [...os].reverse().find((o) => o.vend)?.vend || '';
+      const vendedor = [...os].reverse().find((o) => o.vend)?.vend || last.vendera;
       const nombre = last.cli || os.find((o) => o.cli)?.cli || 'Sin nombre';
       const total = os.reduce((s, o) => s + o.total, 0);
       CL.push({
@@ -379,7 +393,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
             const cerca = 1 - Math.min(1, Math.abs(d - r.dias) / r.dias);
             const repite = ordsCat.length > 1 ? 0.12 : 0;
             const p = lo.prods[0];
-            op = { tipo: 'reposicion', prob: 0.22 + 0.15 * cerca + repite, prod: p ? p.n : r.nombre, precio: lo.total / Math.max(1, lo.prods.reduce((s, x) => s + x.q, 0)),
+            op = { tipo: 'reposicion', prob: 0.22 + 0.15 * cerca + repite, prod: p ? p.n : r.nombre, precio: p ? p.pu : lo.total,
               why: `Compró ${cortar(p ? p.n : r.nombre)} hace ${d} días. Dura unos ${r.dias} días${ordsCat.length > 1 ? ' y ya lo recompró ' + (ordsCat.length - 1) + ' vez' + (ordsCat.length > 2 ? 'es' : '') : ''}.` };
             break;
           }
@@ -392,7 +406,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
         const cc = rc && rc.ofrecer.map((x) => norm(x)).find((x) => !c.cats.has(x) && TOP[x]);
         const esRepo = REGLAS.reposicion.some((r) => lastCat.includes(norm(r.match)));
         const lp = c.last.prods[0];
-        const t = cc ? TOP[cc] : esRepo && lp ? { prod: lp.n, precio: c.last.total / Math.max(1, lp.q) } : TOP[lastCat];
+        const t = cc ? TOP[cc] : esRepo && lp ? { prod: lp.n, precio: lp.pu } : TOP[lastCat];
         op = { tipo: 'reactivar', prob: 0.08 + 0.02 * Math.min(c.n, 6), prod: t ? t.prod : lp?.n || c.last.cat, precio: Math.min(t ? t.precio : c.ticket, c.ticket),
           why: `Compró ${c.n} veces (${gs(c.total)} en total). Lleva ${c.dias} días sin comprar.` };
       }
@@ -427,7 +441,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
     const vistosP = new Set(); let recP = 0, totP = 0;
     ORD.forEach((o) => { if (EMPRESA.test(o.cli)) return; totP += o.total; if (vistosP.has(o.tel)) recP += o.total; vistosP.add(o.tel); });
     const topCli = [...CL].sort((a, b) => b.total - a.total);
-    const sinVend = ORD.filter((o) => !o.vend);
+    const sinVend = ORD.filter((o) => o.auto);
     const porMkt = {};
     ORD.forEach((o) => { porMkt[o.mkt] = (porMkt[o.mkt] || 0) + 1; });
     STATS = {
@@ -436,7 +450,9 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       internos: CL.filter((c) => c.interno), dudosos: CL.filter((c) => c.dudoso), empresas: CL.filter((c) => c.empresa),
     };
     const vs = [...new Set(CL.map((c) => c.vendedor))];
-    if (!vendSel || !vs.includes(vendSel)) vendSel = vs.filter(Boolean).sort((a, b) => CL.filter((c) => c.vendedor === b).length - CL.filter((c) => c.vendedor === a).length)[0] || '';
+    const humanos = new Set(ORD.filter((o) => o.vend).map((o) => o.vend));
+    STATS.humanos = humanos;
+    if (!vendSel || !vs.includes(vendSel)) vendSel = vs.filter((v) => humanos.has(v)).sort((a, b) => CL.filter((c) => c.vendedor === b).length - CL.filter((c) => c.vendedor === a).length)[0] || '';
     $('dataTag').textContent = `${STATS.n.toLocaleString('es-PY')} pedidos · ${fechaCorta(STATS.desde)} al ${fechaCorta(STATS.hasta)}`;
     $('roles').hidden = false;
   }
@@ -495,7 +511,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
   // ===================== VENDEDOR =====================
   function opsDe(v) { return OPS.filter((o) => o.c.vendedor === v && (!soloEmpresas || o.c.empresa)); }
   function vVendedor() {
-    const vendedores = [...new Set(CL.map((c) => c.vendedor))].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+    const vendedores = [...new Set(CL.map((c) => c.vendedor))].sort((a, b) => (STATS.humanos.has(a) ? 0 : 1) - (STATS.humanos.has(b) ? 0 : 1) || a.localeCompare(b));
     const mias = opsDe(vendSel);
     const visibles = mias.filter((o) => { const r = resultados[o.c.tel]; return !r || r.estado === 'volver' || (HOY - r.t) / DAY > REGLAS.fatiga || r.t > HOY - 1 * DAY; });
     const lista = visibles.filter((o) => filtro === 'todos' || o.tipo === filtro).slice(0, REGLAS.listaDiaria);
@@ -508,12 +524,12 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       <div class="goal">
         <div class="row">
           <div class="field" style="min-width:0"><label for="vSel" style="color:inherit;opacity:.85">Vendedor</label>
-            <select id="vSel">${vendedores.map((v) => `<option value="${esc(v)}" ${v === vendSel ? 'selected' : ''}>${esc(v || 'Sin vendedor asignado')} (${CL.filter((c) => c.vendedor === v).length})</option>`).join('')}</select></div>
+            <select id="vSel">${vendedores.map((v) => `<option value="${esc(v)}" ${v === vendSel ? 'selected' : ''}>${STATS.humanos.has(v) ? '' : 'Sin vendedor · '}${esc(v)} (${CL.filter((c) => c.vendedor === v).length})</option>`).join('')}</select></div>
           <div><div class="mut">Ventas potenciales en tu lista de hoy</div><div class="big num">${gs(pot)}</div></div>
         </div>
         <div class="stats num"><span>Cartera: <b>${cartera.toLocaleString('es-PY')}</b> clientes</span><span>Oportunidades abiertas: <b>${visibles.length}</b></span><span>Contactados hoy: <b>${hechos}</b></span><span>Ventas registradas: <b>${ventas}</b></span></div>
       </div>
-      ${!vendSel ? `<div class="warnbox"><b>Estos clientes no tienen vendedor.</b> El ${pct(STATS.sinVend / STATS.n)} de los pedidos del archivo no tiene vendedor cargado, sobre todo los de Tienda Naranja y ContiMarket. El supervisor tiene que repartirlos.</div>` : ''}
+      ${!STATS.humanos.has(vendSel) ? `<div class="warnbox"><b>Clientes de ${esc(vendSel)}.</b> Compraron solos, sin vendedor. Nadie les hace seguimiento hasta que el supervisor los reparta.</div>` : ''}
       <div class="grid2">
         <div class="view">
           <div class="hdr"><h2 class="sec">Tu lista de hoy</h2><p class="sub">Los ${REGLAS.listaDiaria} clientes con más venta esperada (chance × precio). No aparecen los que contactaste en los últimos ${REGLAS.fatiga} días.</p></div>
@@ -608,7 +624,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
         <button type="button" class="btn btn-g" id="dSend">Pedir aprobación al dueño</button>`}
       </div>
       <div class="card"><span class="lab">Historial de pedidos</span>
-        <div class="timeline num">${[...c.os].reverse().map((x) => `<div class="it"><span class="dd">${fechaCorta(x.f)}</span><span>${esc(x.prods.map((p) => (p.q > 1 ? p.q + ' × ' : '') + p.n).join(' + ') || x.cat)}</span><b>${gs(x.total)}</b></div>`).join('')}</div>
+        <div class="timeline num">${[...c.os].reverse().map((x) => `<div class="it"><span class="dd">${fechaCorta(x.f)}</span><span>${x.prods.map((p) => esc((p.q > 1 ? p.q + ' × ' : '') + p.n) + ` <span class="note">(${gs(p.pu)}${p.est ? ' est.' : ''} c/u)</span>`).join('<br>') || esc(x.cat)}</span><b>${gs(x.total)}</b></div>`).join('')}</div>
       </div>`;
     $('sheet').hidden = false; $('scrim').hidden = false;
     const s = $('sheetIn');
@@ -646,28 +662,29 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       const cl = CL.filter((c) => c.vendedor === v);
       const ops = OPS.filter((o) => o.c.vendedor === v);
       const res = Object.values(resultados).filter((r) => r.vend === v);
-      const ped = ORD.filter((o) => (o.vend || '') === v);
+      const ped = ORD.filter((o) => o.vendera === v);
       return { v, cartera: cl.length, rec: cl.filter((c) => c.n > 1).length, ops: ops.length, pot: ops.reduce((s, o) => s + o.ve, 0), cont: res.length, ventas: res.filter((r) => r.estado === 'compro').length, ped: ped.length, fact: ped.reduce((s, o) => s + o.total, 0) };
     }).sort((a, b) => b.fact - a.fact);
-    const sin = rows.find((r) => !r.v);
+    const sinRows = rows.filter((r) => !STATS.humanos.has(r.v));
+    const sin = sinRows.length ? { ops: sinRows.reduce((s, r) => s + r.ops, 0), pot: sinRows.reduce((s, r) => s + r.pot, 0) } : null;
     return `<section class="view">
-      <div class="hdr"><h2 class="sec">Equipo de recompras</h2><p class="sub">Cada cliente queda con el vendedor de su última venta. Los que no tienen vendedor hay que repartirlos.</p></div>
+      <div class="hdr"><h2 class="sec">Equipo de recompras</h2><p class="sub">Cada cliente queda con el vendedor de su última venta. Los que compraron por la web o un marketplace no tienen vendedor: hay que decidir quién los trabaja.</p></div>
       <div class="kpis num">
         <div class="kpi"><span class="k">Oportunidades abiertas</span><span class="v">${OPS.length.toLocaleString('es-PY')}</span><span class="d">${gs(OPS.reduce((s, o) => s + o.ve, 0))} de venta esperada</span></div>
-        <div class="kpi"><span class="k">Sin vendedor</span><span class="v" style="color:var(--bad)">${sin ? sin.ops : 0}</span><span class="d down">oportunidades que nadie va a trabajar</span></div>
+        <div class="kpi"><span class="k">Oportunidades sin vendedor</span><span class="v" style="color:var(--bad)">${sin ? sin.ops : 0}</span><span class="d down">clientes de web y marketplaces</span></div>
         <div class="kpi"><span class="k">Contactos registrados</span><span class="v">${Object.keys(resultados).length}</span><span class="d">${Object.values(resultados).filter((r) => r.estado === 'compro').length} ventas</span></div>
-        <div class="kpi"><span class="k">Pedidos sin vendedor</span><span class="v">${pct(STATS.sinVend / STATS.n)}</span><span class="d down">${STATS.sinVend.toLocaleString('es-PY')} de ${STATS.n.toLocaleString('es-PY')} pedidos</span></div>
+        <div class="kpi"><span class="k">Pedidos por web y marketplaces</span><span class="v">${pct(STATS.sinVend / STATS.n)}</span><span class="d down">${STATS.sinVend.toLocaleString('es-PY')} de ${STATS.n.toLocaleString('es-PY')} pedidos</span></div>
       </div>
       <div class="card"><h2 class="sec">Por vendedor</h2>
         <div class="scroll"><table class="t num">
           <thead><tr><th>Vendedor</th><th class="r">Pedidos</th><th class="r">Facturado</th><th class="r">Cartera</th><th class="r">Recompraron</th><th class="r">Oportunidades</th><th class="r">Venta esperada</th><th class="r">Contactos</th><th class="r">Ventas</th></tr></thead>
-          <tbody>${rows.map((r) => `<tr><td><b>${esc(r.v || 'Sin vendedor')}</b></td><td class="r">${r.ped}</td><td class="r">${gsM(r.fact)}</td><td class="r">${r.cartera}</td><td class="r">${r.rec} (${pct(r.rec / Math.max(1, r.cartera))})</td><td class="r">${r.ops}</td><td class="r">${gs(r.pot)}</td><td class="r">${r.cont}</td><td class="r">${r.ventas}</td></tr>`).join('')}</tbody>
+          <tbody>${rows.map((r) => `<tr><td><b>${esc(r.v)}</b>${STATS.humanos.has(r.v) ? '' : ' <span class="tag">sin vendedor</span>'}</td><td class="r">${r.ped}</td><td class="r">${gsM(r.fact)}</td><td class="r">${r.cartera}</td><td class="r">${r.rec} (${pct(r.rec / Math.max(1, r.cartera))})</td><td class="r">${r.ops}</td><td class="r">${gs(r.pot)}</td><td class="r">${r.cont}</td><td class="r">${r.ventas}</td></tr>`).join('')}</tbody>
         </table></div>
       </div>
       <div class="card"><h2 class="sec">Alertas</h2>
-        ${sin && sin.ops ? `<div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>${sin.ops} oportunidades sin dueño</b>, por ${gs(sin.pot)} de venta esperada. Son sobre todo clientes de marketplaces y pedidos cargados sin vendedor. Hay que decidir quién los trabaja.</div></div>` : ''}
-        ${rows.filter((r) => r.v && r.cartera > 50).map((r) => `<div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${esc(r.v)}</b> tiene ${r.cartera} clientes y ${r.ops} oportunidades abiertas. Con una lista de ${REGLAS.listaDiaria} por día tarda ${Math.ceil(r.ops / REGLAS.listaDiaria)} días hábiles en recorrerlas.</div></div>`).join('')}
-        ${rows.filter((r) => r.v && r.cartera <= 5).length ? `<div class="alert"><span class="dot" style="background:var(--muted)"></span><div>${rows.filter((r) => r.v && r.cartera <= 5).map((r) => esc(r.v)).join(', ')} tienen 5 clientes o menos. Si siguen en el equipo, conviene pasarles parte de los clientes sin vendedor.</div></div>` : ''}
+        ${sin && sin.ops ? `<div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>${sin.ops} oportunidades sin dueño</b>, por ${gs(sin.pot)} de venta esperada. Son clientes que compraron por la web o por marketplaces. Si nadie los toma, no se recontactan nunca.</div></div>` : ''}
+        ${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera > 50).map((r) => `<div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${esc(r.v)}</b> tiene ${r.cartera} clientes y ${r.ops} oportunidades abiertas. Con una lista de ${REGLAS.listaDiaria} por día tarda ${Math.ceil(r.ops / REGLAS.listaDiaria)} días hábiles en recorrerlas.</div></div>`).join('')}
+        ${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera <= 5).length ? `<div class="alert"><span class="dot" style="background:var(--muted)"></span><div>${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera <= 5).map((r) => esc(r.v)).join(', ')} tienen 5 clientes o menos. Si siguen en el equipo, conviene pasarles parte de los clientes sin vendedor.</div></div>` : ''}
       </div>
     </section>`;
   }
@@ -796,7 +813,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       <div class="card"><h2 class="sec">Lo que dicen los datos</h2>
         <div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>Casi nadie vuelve a comprar.</b> Solo ${pct(S.tasaRec)} de los clientes compró más de una vez en ${Math.round((S.hasta - S.desde) / DAY / 30)} meses. Es el problema que este sistema tiene que resolver, y también la oportunidad más grande.</div></div>
         <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>Un cliente explica ${pct(top1.total / S.tot)} de la facturación.</b> ${esc(top1.nombre)} compró ${gsM(top1.total)}; los 5 primeros suman ${pct(top5 / S.tot)}. Ese volumen es de cuentas empresa y no se repite como la venta a personas: conviene medir la recompra de empresas por separado.</div></div>
-        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${pct(S.sinVend / S.n)} de los pedidos no tiene vendedor.</b> Esos clientes no le aparecen a nadie en su lista. Hay que decidir quién los trabaja.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${pct(S.sinVend / S.n)} de los pedidos se vendió solo</b>, por la web o un marketplace, sin vendedor. Esos clientes no tienen a nadie que los recontacte. Hay que decidir quién los trabaja.</div></div>
         <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${pct(mpTot / S.n)} de los pedidos vino por marketplaces</b> (Tienda Naranja, ContiMarket y otros). Antes de contactarlos por WhatsApp, confirmá que el contrato de cada marketplace lo permite. Si se puede, pasar esa recompra a venta directa ahorra la comisión del marketplace.</div></div>
         <div class="alert"><span class="dot" style="background:var(--ok)"></span><div><b>Skincare es la mejor base para empezar.</b> ${(recompraPorCat().find((r) => /skincare/i.test(r.cat)) || { rep: 0 }).rep} clientes ya repitieron la categoría sin que nadie los llamara, y un solo producto (Celimax Retinal Shot) concentra la mayoría de las ventas.</div></div>
       </div>
@@ -858,6 +875,7 @@ svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
       <div class="hdr"><h2 class="sec">Calidad de los datos</h2><p class="sub">Lo que el sistema dejó afuera o marcó, para que la lista no tenga errores.</p></div>
       <div class="kpis num">
         <div class="kpi"><span class="k">Pedidos leídos</span><span class="v">${S.n.toLocaleString('es-PY')}</span><span class="d">${fechaCorta(S.desde)} al ${fechaCorta(S.hasta)}</span></div>
+        <div class="kpi"><span class="k">Precio por producto</span><span class="v">${pct(ORD.filter((o) => o.prods.length === 1).length / S.n)}</span><span class="d">de los pedidos tienen un solo producto: precio exacto. En el resto se estima.</span></div>
         <div class="kpi"><span class="k">Clientes (por teléfono)</span><span class="v">${S.clientes.toLocaleString('es-PY')}</span><span class="d">${S.empresas.length} parecen empresas</span></div>
         <div class="kpi"><span class="k">Internos excluidos</span><span class="v">${S.internos.length}</span><span class="d">el cliente se llama igual que un vendedor</span></div>
         <div class="kpi"><span class="k">Teléfonos dudosos</span><span class="v">${S.dudosos.length}</span><span class="d">números repetidos o incompletos</span></div>
