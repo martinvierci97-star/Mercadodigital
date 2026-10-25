@@ -3,21 +3,41 @@
 -- Pegar completo en Supabase > SQL Editor > New query > Run
 -- ============================================================
 
+-- >>> ANTES DE CORRERLO: poné tu correo en la línea de abajo. <<<
+-- Ese correo queda como SUPERADMIN: el único que aprueba usuarios.
+create table if not exists public.ajustes (clave text primary key, valor text not null);
+insert into public.ajustes (clave, valor) values ('superadmin', 'TU_CORREO@ejemplo.com')
+  on conflict (clave) do update set valor = excluded.valor;
+alter table public.ajustes enable row level security;  -- nadie la lee desde la web
+
 -- Perfiles: cada persona que crea su usuario queda "pendiente"
 -- hasta que un administrador la aprueba.
 create table if not exists public.perfiles (
   id      uuid primary key references auth.users on delete cascade,
   email   text,
   nombre  text default '',
-  rol     text not null default 'pendiente' check (rol in ('pendiente', 'usuario', 'admin')),
-  creado  timestamptz not null default now()
+  rol     text not null default 'pendiente' check (rol in ('pendiente', 'rechazado', 'usuario', 'admin', 'superadmin')),
+  creado  timestamptz not null default now(),
+  aprobado_por uuid references auth.users on delete set null,
+  aprobado_en  timestamptz
 );
+alter table public.perfiles drop constraint if exists perfiles_rol_check;
+alter table public.perfiles add constraint perfiles_rol_check check (rol in ('pendiente', 'rechazado', 'usuario', 'admin', 'superadmin'));
+alter table public.perfiles add column if not exists aprobado_por uuid references auth.users on delete set null;
+alter table public.perfiles add column if not exists aprobado_en timestamptz;
+
+-- Solo puede haber un superadmin
+create unique index if not exists un_solo_superadmin on public.perfiles (rol) where rol = 'superadmin';
 
 create or replace function public.nuevo_usuario()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.perfiles (id, email, nombre)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data ->> 'nombre', ''));
+  -- El correo configurado arriba entra directo como superadmin; el resto queda pendiente
+  insert into public.perfiles (id, email, nombre, rol)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data ->> 'nombre', ''),
+          case when lower(new.email) = (select lower(valor) from public.ajustes where clave = 'superadmin')
+                and not exists (select 1 from public.perfiles where rol = 'superadmin')
+               then 'superadmin' else 'pendiente' end);
   return new;
 end $$;
 
@@ -27,12 +47,17 @@ create trigger al_crear_usuario after insert on auth.users
 
 create or replace function public.es_usuario()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.perfiles where id = auth.uid() and rol in ('usuario', 'admin'));
+  select exists (select 1 from public.perfiles where id = auth.uid() and rol in ('usuario', 'admin', 'superadmin'));
 $$;
 
 create or replace function public.es_admin()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.perfiles where id = auth.uid() and rol = 'admin');
+  select exists (select 1 from public.perfiles where id = auth.uid() and rol in ('admin', 'superadmin'));
+$$;
+
+create or replace function public.es_superadmin()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.perfiles where id = auth.uid() and rol = 'superadmin');
 $$;
 
 -- Pedidos: una fila por pedido del Excel del admin
@@ -95,11 +120,14 @@ alter table public.ofrecidos    enable row level security;
 alter table public.consultas_ia enable row level security;
 
 drop policy if exists perfiles_ver on public.perfiles;
-create policy perfiles_ver on public.perfiles for select using (id = auth.uid() or public.es_admin());
+create policy perfiles_ver on public.perfiles for select using (id = auth.uid() or public.es_superadmin());
+-- Solo el superadmin aprueba o cambia accesos; nunca puede crear otro superadmin ni tocarse a sí mismo
 drop policy if exists perfiles_admin on public.perfiles;
-create policy perfiles_admin on public.perfiles for update using (public.es_admin()) with check (public.es_admin());
+create policy perfiles_admin on public.perfiles for update
+  using (public.es_superadmin() and id <> auth.uid())
+  with check (public.es_superadmin() and rol <> 'superadmin');
 drop policy if exists perfiles_borrar on public.perfiles;
-create policy perfiles_borrar on public.perfiles for delete using (public.es_admin());
+create policy perfiles_borrar on public.perfiles for delete using (public.es_superadmin() and id <> auth.uid());
 
 drop policy if exists pedidos_ver on public.pedidos;
 create policy pedidos_ver on public.pedidos for select using (public.es_usuario());

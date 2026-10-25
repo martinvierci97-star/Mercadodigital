@@ -71,7 +71,7 @@ export default async function handler(req, res) {
   const { data: u, error: eu } = await supabase.auth.getUser(token);
   if (eu || !u?.user) { res.status(401).json({ error: 'Iniciá sesión de nuevo.' }); return; }
   const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', u.user.id).single();
-  if (!perfil || !['usuario', 'admin'].includes(perfil.rol)) { res.status(403).json({ error: 'Tu usuario todavía no está aprobado.' }); return; }
+  if (!perfil || !['usuario', 'admin', 'superadmin'].includes(perfil.rol)) { res.status(403).json({ error: 'Tu usuario todavía no está aprobado.' }); return; }
 
   // 2. Límite de uso para cuidar el costo
   const haceUnaHora = new Date(Date.now() - 3600e3).toISOString();

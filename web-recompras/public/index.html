@@ -229,7 +229,7 @@ tr.click:hover td { background: var(--surface-2); }
 <header class="top gut"><div class="wrap">
   <div class="brand">
     <h1>Recompras <span>Mercado Digital</span></h1>
-    <span class="who" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="dataTag num" id="dataTag">Conectando…</span><button type="button" class="salir" id="btnSalir" hidden>Salir</button></span>
+    <span class="who" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="dataTag num" id="dataTag">Conectando…</span><span class="tag" id="rolTag" hidden></span><button type="button" class="salir" id="btnSalir" hidden>Salir</button></span>
   </div>
   <div class="roles" role="toolbar" aria-label="Secciones" id="tabs"></div>
 </div></header>
@@ -294,7 +294,9 @@ tr.click:hover td { background: var(--surface-2); }
   // ============================================================
   // Estado
   // ============================================================
-  let sb = null, perfil = null, iaOn = false, puedeEditar = false, recuperando = false;
+  let sb = null, perfil = null, iaOn = false, puedeEditar = false, esSuper = false, recuperando = false;
+  const ACTIVOS = ['usuario', 'admin', 'superadmin'];
+  const ROL_T = { pendiente: 'Pendiente', rechazado: 'Rechazado', usuario: 'Usuario', admin: 'Administrador', superadmin: 'Superadmin' };
   const sample = true, downloads = true;
   let CHUNKS = {}, OFRECIDOS = {};
   let ORD = [], CL = [], CAT = [], PROD = {}, S = null, CO = {};
@@ -478,10 +480,11 @@ tr.click:hover td { background: var(--surface-2); }
   const TABS = [['resumen', 'Resumen'], ['ofrecer', 'Ofrecer ahora'], ['clientes', 'Clientes'], ['productos', 'Productos y ciclos'], ['cargar', 'Cargar pedidos'], ['usuarios', 'Usuarios']];
   function render() {
     const app = $('app');
-    if (!perfil || perfil.rol === 'pendiente' || recuperando) { $('tabs').innerHTML = ''; app.innerHTML = vAuth(); wireAuth(); return; }
-    $('tabs').innerHTML = TABS.filter(([k]) => !['cargar', 'usuarios'].includes(k) || puedeEditar).map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === tab}">${l}</button>`).join('');
-    $('tabs').querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; lsSet('cr-tab', tab); render(); window.scrollTo(0, 0); });
-    if (!V[tab] || (['cargar', 'usuarios'].includes(tab) && !puedeEditar)) tab = 'resumen';
+    if (!perfil || !ACTIVOS.includes(perfil.rol) || recuperando) { $('tabs').innerHTML = ''; app.innerHTML = vAuth(); wireAuth(); return; }
+    const pend = USUARIOS.filter((u) => u.rol === 'pendiente').length;
+    $('tabs').innerHTML = TABS.filter(([k]) => (k !== 'cargar' || puedeEditar) && (k !== 'usuarios' || esSuper)).map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === tab}">${l}${k === 'usuarios' && pend ? ` · ${pend} por aprobar` : ''}</button>`).join('');
+    $('tabs').querySelectorAll('[data-tab]').forEach((b) => b.onclick = async () => { tab = b.dataset.tab; lsSet('cr-tab', tab); if (tab === 'usuarios') await cargarUsuarios(); render(); window.scrollTo(0, 0); });
+    if (!V[tab] || (tab === 'cargar' && !puedeEditar) || (tab === 'usuarios' && !esSuper)) tab = 'resumen';
     if (tab === 'usuarios') { app.innerHTML = V.usuarios(); W.usuarios(); return; }
     if (!S) { app.innerHTML = puedeEditar ? V.cargar() : `<section class="view"><div class="card"><h2 class="sec">Todavía no hay pedidos cargados</h2></div></section>`; if (puedeEditar) W.cargar(); return; }
     app.innerHTML = V[tab](); (W[tab] || (() => {}))();
@@ -833,13 +836,15 @@ tr.click:hover td { background: var(--surface-2); }
       <div class="field"><label for="aPass">Clave nueva</label><input type="password" id="aPass" autocomplete="new-password" minlength="8" required class="in" style="min-height:44px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px"></div>
       <button type="submit" class="btn btn-p">Guardar clave</button>${authMsg ? `<p class="note" style="color:var(--bad)">${esc(authMsg)}</p>` : ''}</form></section>`;
     if (perfil && perfil.rol === 'pendiente') return `<section class="view auth"><div class="card"><h2 class="sec">Tu usuario está esperando aprobación</h2>
-      <p class="note">Entraste como <b>${esc(perfil.email)}</b>. Un administrador tiene que aprobarte para que veas los datos de clientes. Cuando lo haga, recargá esta página.</p>
-      <button type="button" class="btn btn-g" id="aRecargar">Ya me aprobaron, recargar</button></div></section>`;
+      <p class="note">Entraste como <b>${esc(perfil.email)}</b>. El superadmin de Mercado Digital tiene que aprobarte para que veas los datos. Cuando lo haga, tocá el botón.</p>
+      <button type="button" class="btn btn-g" id="aRecargar">Ya me aprobaron, entrar</button></div></section>`;
+    if (perfil && perfil.rol === 'rechazado') return `<section class="view auth"><div class="card"><h2 class="sec">No tenés acceso</h2>
+      <p class="note">El usuario <b>${esc(perfil.email)}</b> no tiene acceso al sistema. Si creés que es un error, hablá con el superadmin de Mercado Digital.</p></div></section>`;
     const crear = authModo === 'crear', olvido = authModo === 'olvido';
     const inp = (id, label, type, ac) => `<div class="field"><label for="${id}">${label}</label><input type="${type}" id="${id}" autocomplete="${ac}" required class="in" style="min-height:44px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)"></div>`;
     return `<section class="view auth"><form class="card" id="fAuth" novalidate>
       <h2 class="sec">${crear ? 'Crear usuario' : olvido ? 'Recuperar clave' : 'Entrar'}</h2>
-      <p class="note">${crear ? 'Después de crearlo, un administrador te tiene que aprobar para ver los datos.' : olvido ? 'Te mandamos un correo con un link para elegir una clave nueva.' : 'Sistema de recompras de Mercado Digital.'}</p>
+      <p class="note">${crear ? 'Después de crearlo, el superadmin te tiene que aprobar para ver los datos.' : olvido ? 'Te mandamos un correo con un link para elegir una clave nueva.' : 'Sistema de recompras de Mercado Digital.'}</p>
       ${crear ? inp('aNombre', 'Tu nombre', 'text', 'name') : ''}
       ${inp('aEmail', 'Correo', 'email', 'email')}
       ${olvido ? '' : inp('aPass', 'Clave' + (crear ? ' (mínimo 8 caracteres)' : ''), 'password', crear ? 'new-password' : 'current-password')}
@@ -849,7 +854,8 @@ tr.click:hover td { background: var(--surface-2); }
     </form></section>`;
   }
   function wireAuth() {
-    if ($('aRecargar')) { $('aRecargar').onclick = () => location.reload(); return; }
+    if ($('aRecargar')) { $('aRecargar').onclick = () => alEntrar(); return; }
+    if (!$('fAuth')) return;
     document.querySelectorAll('[data-modo]').forEach((b) => b.onclick = () => { authModo = b.dataset.modo; authMsg = null; render(); });
     $('fAuth').onsubmit = async (e) => {
       e.preventDefault(); const b = $('aBtn') || e.target.querySelector('button[type=submit]'); b.disabled = true;
@@ -868,18 +874,40 @@ tr.click:hover td { background: var(--surface-2); }
       authMsg = null;
     };
   }
-  V.usuarios = () => `<section class="view">
-    <div class="hdr"><h2 class="sec">Usuarios</h2><p class="sub">Cualquiera puede crear un usuario con el link de la web, pero no ve ningún dato hasta que lo aprobás acá.</p></div>
-    <div class="card"><div class="scroll"><table class="t"><thead><tr><th>Nombre</th><th>Correo</th><th>Desde</th><th>Acceso</th><th></th></tr></thead><tbody>
-      ${USUARIOS.map((u) => `<tr><td><b>${esc(u.nombre || '—')}</b>${u.id === perfil.id ? ' (vos)' : ''}</td><td>${esc(u.email)}</td><td class="num">${fecha(u.creado)}</td>
-        <td><select class="in" data-rol="${esc(u.id)}" ${u.id === perfil.id ? 'disabled' : ''} aria-label="Acceso de ${esc(u.email)}"><option value="pendiente" ${u.rol === 'pendiente' ? 'selected' : ''}>Pendiente (no ve nada)</option><option value="usuario" ${u.rol === 'usuario' ? 'selected' : ''}>Usuario (ve y ofrece)</option><option value="admin" ${u.rol === 'admin' ? 'selected' : ''}>Administrador</option></select></td>
-        <td>${u.id === perfil.id ? '' : `<button type="button" class="btn btn-bad" data-borrar="${esc(u.id)}" style="min-height:36px">Quitar</button>`}</td></tr>`).join('')}
+  V.usuarios = () => {
+    const pend = USUARIOS.filter((u) => u.rol === 'pendiente');
+    const act = USUARIOS.filter((u) => ACTIVOS.includes(u.rol));
+    const rech = USUARIOS.filter((u) => u.rol === 'rechazado');
+    const nom = (u) => `<b>${esc(u.nombre || '—')}</b><br><span class="note">${esc(u.email)}</span>`;
+    return `<section class="view">
+    <div class="hdr"><h2 class="sec">Usuarios</h2><p class="sub">Cualquiera puede crear su usuario con el link de la web. Nadie ve datos hasta que vos lo aprobás. Solo vos, como superadmin, ves esta pantalla.</p></div>
+    <div class="card"><h2 class="sec">Por aprobar · ${pend.length}</h2>
+      ${pend.length ? `<div class="scroll"><table class="t"><thead><tr><th>Persona</th><th>Pidió acceso</th><th>Darle acceso como</th><th></th></tr></thead><tbody>
+        ${pend.map((u) => `<tr><td class="w">${nom(u)}</td><td class="num">${fecha(u.creado)}</td>
+          <td><select class="in" data-nivel="${esc(u.id)}" aria-label="Nivel para ${esc(u.email)}"><option value="usuario">Usuario</option><option value="admin">Administrador</option></select></td>
+          <td><div class="btns"><button type="button" class="btn btn-ok" data-aprobar="${esc(u.id)}">Aprobar</button><button type="button" class="btn btn-bad" data-rechazar="${esc(u.id)}">Rechazar</button></div></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="note">No hay nadie esperando. Cuando alguien cree su usuario, aparece acá.</p>'}
+      <button type="button" class="btn btn-g" id="uRefrescar">Actualizar lista</button>
+    </div>
+    <div class="card"><h2 class="sec">Con acceso · ${act.length}</h2><div class="scroll"><table class="t"><thead><tr><th>Persona</th><th>Aprobado</th><th>Nivel</th><th></th></tr></thead><tbody>
+      ${act.map((u) => `<tr><td class="w">${nom(u)}${u.id === perfil.id ? ' <span class="tag">vos</span>' : ''}</td><td class="num">${u.aprobado_en ? fecha(u.aprobado_en) : '—'}</td>
+        <td>${u.rol === 'superadmin' ? '<span class="tag t-complemento">Superadmin</span>' : `<select class="in" data-rol="${esc(u.id)}" aria-label="Nivel de ${esc(u.email)}"><option value="usuario" ${u.rol === 'usuario' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.rol === 'admin' ? 'selected' : ''}>Administrador</option></select>`}</td>
+        <td>${u.rol === 'superadmin' ? '' : `<button type="button" class="btn btn-bad" data-rechazar="${esc(u.id)}" style="min-height:36px">Quitar acceso</button>`}</td></tr>`).join('')}
     </tbody></table></div>
-    <p class="note">Los administradores además cargan pedidos, cambian los ciclos y aprueban usuarios. "Quitar" le saca el acceso; para borrar la cuenta del todo, hacelo desde Supabase.</p></div>
+    <p class="note"><b>Usuario:</b> ve clientes y listas, usa la IA y marca ofrecidos. <b>Administrador:</b> además carga pedidos y cambia ciclos. Solo el superadmin aprueba personas.</p></div>
+    ${rech.length ? `<div class="card"><h2 class="sec">Sin acceso · ${rech.length}</h2>${rech.map((u) => `<div class="cat-row"><span>${nom(u)}</span><span></span><button type="button" class="btn btn-g" data-aprobar="${esc(u.id)}" style="min-height:36px">Darle acceso</button></div>`).join('')}</div>` : ''}
   </section>`;
+  };
   W.usuarios = () => {
-    document.querySelectorAll('[data-rol]').forEach((s) => s.onchange = async () => { const { error } = await sb.from('perfiles').update({ rol: s.value }).eq('id', s.dataset.rol); toast(error ? 'No se pudo cambiar.' : 'Acceso actualizado'); await cargarUsuarios(); render(); });
-    document.querySelectorAll('[data-borrar]').forEach((b) => b.onclick = async () => { const { error } = await sb.from('perfiles').update({ rol: 'pendiente' }).eq('id', b.dataset.borrar); toast(error ? 'No se pudo quitar.' : 'Acceso quitado'); await cargarUsuarios(); render(); });
+    const cambiar = async (id, rol, msg) => {
+      const cambios = { rol }; if (ACTIVOS.includes(rol)) { cambios.aprobado_por = perfil.id; cambios.aprobado_en = new Date().toISOString(); }
+      const { error } = await sb.from('perfiles').update(cambios).eq('id', id);
+      toast(error ? 'No se pudo guardar el cambio.' : msg); await cargarUsuarios(); render();
+    };
+    document.querySelectorAll('[data-aprobar]').forEach((b) => b.onclick = () => { const sel = document.querySelector(`[data-nivel="${CSS.escape(b.dataset.aprobar)}"]`); cambiar(b.dataset.aprobar, sel ? sel.value : 'usuario', 'Aprobado. Ya puede entrar'); });
+    document.querySelectorAll('[data-rechazar]').forEach((b) => b.onclick = () => cambiar(b.dataset.rechazar, 'rechazado', 'Acceso quitado'));
+    document.querySelectorAll('[data-rol]').forEach((x) => x.onchange = () => cambiar(x.dataset.rol, x.value, 'Nivel actualizado'));
+    $('uRefrescar').onclick = async () => { await cargarUsuarios(); render(); };
   };
 
   // ============================================================
@@ -913,7 +941,8 @@ tr.click:hover td { background: var(--surface-2); }
     OFRECIDOS = {}; (data || []).forEach((r) => { OFRECIDOS[r.telefono] = { t: Date.parse(r.fecha) }; });
   }
   async function cargarUsuarios() {
-    const { data } = await sb.from('perfiles').select('id,email,nombre,rol,creado').order('creado', { ascending: false });
+    if (!esSuper) { USUARIOS = []; return; }
+    const { data } = await sb.from('perfiles').select('id,email,nombre,rol,creado,aprobado_en').order('creado', { ascending: false });
     USUARIOS = data || [];
   }
   async function alEntrar() {
@@ -921,12 +950,15 @@ tr.click:hover td { background: var(--surface-2); }
     if (!user) { perfil = null; $('btnSalir').hidden = true; $('dataTag').textContent = 'Recompras'; render(); return; }
     const { data } = await sb.from('perfiles').select('id,email,nombre,rol').eq('id', user.id).single();
     perfil = data || { id: user.id, email: user.email, rol: 'pendiente' };
-    puedeEditar = perfil.rol === 'admin';
+    puedeEditar = ['admin', 'superadmin'].includes(perfil.rol); esSuper = perfil.rol === 'superadmin';
     $('btnSalir').hidden = false;
-    if (perfil.rol === 'pendiente') { $('dataTag').textContent = perfil.email; render(); return; }
+    if (!ACTIVOS.includes(perfil.rol)) { $('dataTag').textContent = perfil.email; render(); return; }
     $('dataTag').textContent = 'Cargando pedidos…'; render();
-    await Promise.all([cargarPedidos(), cargarCiclos(), cargarOfrecidos(), puedeEditar ? cargarUsuarios() : null]);
+    await Promise.all([cargarPedidos(), cargarCiclos(), cargarOfrecidos(), cargarUsuarios()]);
+    $('rolTag').textContent = ROL_T[perfil.rol]; $('rolTag').hidden = false;
     schedule();
+    // El superadmin ve llegar los pedidos de acceso sin recargar
+    if (esSuper && !alEntrar.t) alEntrar.t = setInterval(async () => { const n = USUARIOS.filter((u) => u.rol === 'pendiente').length; await cargarUsuarios(); if (USUARIOS.filter((u) => u.rol === 'pendiente').length !== n) schedule(); }, 60000);
   }
 
   // ============================================================

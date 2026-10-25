@@ -2,7 +2,7 @@
 
 Tiempo total: unos 40 minutos. No hace falta programar: solo crear cuentas, copiar y pegar.
 
-Al terminar vas a tener una web con su propia dirección. Cualquiera puede crear su usuario, pero **nadie ve datos de clientes hasta que vos lo aprobás**.
+Al terminar vas a tener una web con su propia dirección. Cualquiera puede crear su usuario, pero **nadie ve datos de clientes hasta que vos, como superadmin, lo aprobás**.
 
 ## Qué vas a usar
 
@@ -22,8 +22,16 @@ Tené a mano un documento de texto para ir pegando las claves que vas copiando.
 2. **New project**. Nombre: `recompras`. Elegí una contraseña fuerte para la base y guardala. Región: **South America (São Paulo)**, la más cercana a Paraguay.
 3. Esperá unos 2 minutos a que se cree.
 4. Menú izquierdo → **SQL Editor** → **New query**.
-5. Abrí el archivo `web-recompras/supabase/schema.sql` en tu GitHub, copiá **todo** el contenido, pegalo y tocá **Run**. Tiene que decir "Success".
-6. Menú izquierdo → **Project Settings** → **API**. Copiá a tu documento:
+5. Abrí el archivo `web-recompras/supabase/schema.sql` en tu GitHub, copiá **todo** el contenido y pegalo.
+6. **Antes de tocar Run**, buscá esta línea casi al principio y cambiá `TU_CORREO@ejemplo.com` por **tu correo**:
+
+   ```sql
+   insert into public.ajustes (clave, valor) values ('superadmin', 'TU_CORREO@ejemplo.com')
+   ```
+
+   Ese correo va a ser el **superadmin**: el único que aprueba usuarios. Tiene que ser el mismo correo con el que después vas a crear tu usuario en la web.
+7. Tocá **Run**. Tiene que decir "Success".
+8. Menú izquierdo → **Project Settings** → **API**. Copiá a tu documento:
    - **Project URL**: es tu `SUPABASE_URL`.
    - **anon public**: es tu `SUPABASE_ANON_KEY`.
    - **service_role** (tocá "Reveal"): es tu `SUPABASE_SERVICE_ROLE_KEY`. **Esta es secreta: no la mandes por WhatsApp ni la pegues en ningún otro lado.**
@@ -60,19 +68,16 @@ La web además limita a cada usuario a 60 consultas por hora.
 
 Sin este paso, los correos de confirmación y de "olvidé mi clave" mandan a una dirección equivocada.
 
-## Paso 5: hacerte administrador
+## Paso 5: entrar como superadmin
 
-1. Abrí tu web y tocá **No tengo usuario: crear uno**. Usá tu correo.
-2. Confirmá el correo que te llega y entrá. Vas a ver "esperando aprobación": es normal, falta un paso.
-3. En Supabase → **SQL Editor** → **New query**, pegá esto **cambiando el correo por el tuyo** y tocá **Run**:
+1. Abrí tu web y tocá **No tengo usuario: crear uno**. Usá **el mismo correo** que pusiste en el Paso 1.
+2. Confirmá el correo que te llega y entrá. Arriba a la derecha vas a ver la etiqueta **Superadmin** y la pestaña **Usuarios**.
 
-   ```sql
-   update public.perfiles set rol = 'admin' where email = 'TU_CORREO@ejemplo.com';
-   ```
+Si entrás y dice "esperando aprobación", el correo no coincidió con el del Paso 1. Arreglalo en Supabase → **SQL Editor** → **New query** (cambiando el correo por el tuyo) → **Run**, y después recargá la web:
 
-4. Recargá la web. Ya sos administrador.
-
-Este paso se hace una sola vez. A los demás los aprobás desde la web, en la pestaña **Usuarios**.
+```sql
+update public.perfiles set rol = 'superadmin' where email = 'TU_CORREO@ejemplo.com';
+```
 
 ## Paso 6: cargar los pedidos
 
@@ -93,14 +98,21 @@ Para que la dirección sea, por ejemplo, `recompras.mercadodigital.com.py`:
 ## Cómo entra tu equipo
 
 1. Les pasás la dirección de la web.
-2. Cada uno toca **Crear usuario** y confirma su correo.
-3. Vos entrás a la pestaña **Usuarios** y les cambiás el acceso de *Pendiente* a *Usuario* (o *Administrador*).
+2. Cada uno toca **Crear usuario** y confirma su correo. Queda **pendiente**: no ve nada.
+3. Vos entrás a la pestaña **Usuarios**. Arriba aparece **"Por aprobar"** con cada persona nueva. Elegís el nivel (*Usuario* o *Administrador*) y tocás **Aprobar**, o **Rechazar**.
+4. La persona toca "Ya me aprobaron, entrar" y ya ve los datos.
 
-| Acceso | Qué puede hacer |
+Cuando hay gente esperando, la pestaña muestra **"Usuarios · N por aprobar"**. Se actualiza sola cada minuto.
+
+| Nivel | Qué puede hacer |
 |---|---|
 | Pendiente | Nada. No ve ningún dato. |
+| Rechazado | Nada. Si cambiás de idea, lo aprobás desde "Sin acceso". |
 | Usuario | Ve clientes y listas, usa la IA y marca clientes como ofrecidos. |
-| Administrador | Todo lo anterior, más cargar pedidos, cambiar los ciclos y aprobar usuarios. |
+| Administrador | Todo lo anterior, más cargar pedidos y cambiar los ciclos. **No puede aprobar personas.** |
+| Superadmin (vos) | Todo, y es el único que aprueba, rechaza o cambia el nivel de los demás. Hay uno solo. |
+
+Para sacarle el acceso a alguien (por ejemplo, si deja la empresa): **Usuarios → Con acceso → Quitar acceso**. Deja de ver datos al instante.
 
 ## Si algo falla
 
@@ -109,4 +121,5 @@ Para que la dirección sea, por ejemplo, `recompras.mercadodigital.com.py`:
 | La web dice "Falta configurar el sistema" | Revisá en Vercel que las 4 variables estén con el nombre exacto, y volvé a publicar (Deployments → Redeploy). |
 | No llega el correo de confirmación | El plan gratis de Supabase manda pocos correos por hora. Esperá un rato, o desactivá la confirmación en Authentication → Providers → Email → **Confirm email**. Los datos siguen protegidos porque igual tenés que aprobar a cada usuario. |
 | El botón de IA da error de clave | Revisá `ANTHROPIC_API_KEY` en Vercel y que haya crédito en la consola de Anthropic. |
-| Un usuario aprobado no ve datos | Que cierre sesión (botón **Salir**) y vuelva a entrar. |
+| Un usuario aprobado no ve datos | Que toque "Ya me aprobaron, entrar", o que cierre sesión (botón **Salir**) y vuelva a entrar. |
+| Perdiste el acceso a tu correo de superadmin | Supabase → SQL Editor: `update public.perfiles set rol = 'superadmin' where email = 'CORREO_NUEVO';` (antes de crear el nuevo, bajá el anterior con `update public.perfiles set rol = 'usuario' where rol = 'superadmin';`). |
