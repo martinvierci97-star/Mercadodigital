@@ -1,0 +1,933 @@
+<title>Motor de Recompras</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Albert+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: barra de rol arriba, contenido en una columna en celular y dos en escritorio; ficha del cliente como panel inferior */
+:root {
+  --bg: #f2f4f8;
+  --surface: #ffffff;
+  --surface-2: #e8ecf3;
+  --fg: #141a26;
+  --muted: #5d6679;
+  --line: #d8dee9;
+  --accent: #1d2a6b;
+  --accent-2: #f39200;
+  --accent-fg: #ffffff;
+  --accent-soft: #e3e7f6;
+  --ok: #187a4a; --ok-soft: #dbf2e5;
+  --warn: #a35c00; --warn-soft: #fcecd2;
+  --bad: #b42a2a; --bad-soft: #fbe2e2;
+  --ai: #7a3fb8; --ai-soft: #efe4fa;
+  --display: "Bricolage Grotesque", "Albert Sans", system-ui, sans-serif;
+  --body: "Albert Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e121a; --surface: #161c27; --surface-2: #202836; --fg: #e8ecf4; --muted: #9aa4b8; --line: #2b3445;
+    --accent: #9fb0ff; --accent-2: #ffb347; --accent-fg: #0b1430; --accent-soft: #1f2a4d;
+    --ok: #5ccf92; --ok-soft: #133224; --warn: #f2b65a; --warn-soft: #3a2a10; --bad: #ff8d8d; --bad-soft: #3d1a1a;
+    --ai: #c79bf5; --ai-soft: #2c1f3d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e121a; --surface: #161c27; --surface-2: #202836; --fg: #e8ecf4; --muted: #9aa4b8; --line: #2b3445;
+  --accent: #9fb0ff; --accent-2: #ffb347; --accent-fg: #0b1430; --accent-soft: #1f2a4d;
+  --ok: #5ccf92; --ok-soft: #133224; --warn: #f2b65a; --warn-soft: #3a2a10; --bad: #ff8d8d; --bad-soft: #3d1a1a;
+  --ai: #c79bf5; --ai-soft: #2c1f3d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45; -webkit-tap-highlight-color: transparent; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 2px; }
+.gut { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: var(--surface); border-bottom: 1px solid var(--line); padding-block: 10px; }
+header.top .wrap { display: grid; gap: 10px; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.2px; }
+.brand h1 span { color: var(--accent-2); }
+.dataTag { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--surface-2); padding: 4px 10px; border-radius: 999px; }
+.roles { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.roles::-webkit-scrollbar { display: none; }
+.roles button { flex: none; border: 1.5px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: 999px; font-weight: 600; font-size: 14px; min-height: 40px; }
+.roles button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.roles .lbl { flex: none; align-self: center; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; padding-right: 2px; }
+
+main { padding-block: 18px 60px; }
+.view { display: grid; gap: 18px; }
+h2.sec { margin: 0; font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: -.1px; text-wrap: balance; }
+.sub { margin: 0; color: var(--muted); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.grid2 { display: grid; gap: 18px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .grid2 { grid-template-columns: 1.35fr 1fr; align-items: start; } }
+.hdr { display: grid; gap: 6px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 2px; min-width: 0; align-content: start; }
+.kpi .k { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.kpi .v { font-family: var(--display); font-weight: 800; font-size: clamp(20px, 2.1vw, 24px); letter-spacing: -.3px; overflow-wrap: anywhere; }
+.kpi .d { font-size: 13px; color: var(--muted); }
+.kpi .d.down { color: var(--bad); } .kpi .d.up { color: var(--ok); }
+
+.goal { background: var(--accent); color: var(--accent-fg); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; }
+.goal .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: end; }
+.goal .big { font-family: var(--display); font-weight: 800; font-size: 26px; }
+.goal .mut { opacity: .8; font-size: 13px; }
+.goal select { background: var(--surface); color: var(--fg); border: 0; min-height: 44px; border-radius: 10px; padding: 8px 10px; font-weight: 700; max-width: 100%; }
+.goal .stats { display: flex; gap: 8px 18px; flex-wrap: wrap; font-size: 13px; }
+.goal .stats b { font-size: 15px; }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; min-height: 36px; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+.list { display: grid; gap: 10px; }
+.cli { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; text-align: left; width: 100%; }
+.cli:hover { border-color: var(--accent); }
+.cli.done { opacity: .6; }
+.cli .h { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+.cli .h > div { min-width: 0; }
+.cli .nm { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+.cli .why { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.score { flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-family: var(--display); font-weight: 800; font-size: 18px; line-height: 1; }
+.score small { font-family: var(--body); font-size: 10px; font-weight: 600; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.t-reposicion { background: var(--ok-soft); color: var(--ok); }
+.t-complemento { background: var(--accent-soft); color: var(--accent); }
+.t-reactivar { background: var(--warn-soft); color: var(--warn); }
+.t-afinidad { background: var(--ai-soft); color: var(--ai); }
+.t-bad { background: var(--bad-soft); color: var(--bad); }
+.cli .sug { display: flex; justify-content: space-between; gap: 6px 10px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-2); border-radius: 10px; font-size: 14px; }
+.cli .sug > span { min-width: 0; overflow-wrap: anywhere; }
+
+.btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.btn-p { background: var(--accent); color: var(--accent-fg); }
+.btn-o { background: var(--accent-2); color: #1b1200; }
+.btn-g { background: var(--surface-2); color: var(--fg); }
+.btn-ok { background: var(--ok); color: #fff; }
+.btn-bad { background: var(--bad-soft); color: var(--bad); }
+.btn-wa { background: #1f9d55; color: #fff; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.scroll { overflow-x: auto; }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+table.t th, table.t td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+table.t th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; font-weight: 600; }
+table.t td.r, table.t th.r { text-align: right; }
+table.t td.w { white-space: normal; min-width: 180px; }
+table.t tr:last-child td { border-bottom: 0; }
+
+.scrim { position: fixed; inset: 0; background: rgba(8, 12, 20, .45); z-index: 20; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow-y: auto;
+  background: var(--bg); border-radius: 18px 18px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,.25);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+.sheet .in { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+.sheet .grab { width: 44px; height: 5px; background: var(--line); border-radius: 999px; margin: 0 auto 4px; }
+.sheet .hd { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.sheet .hd > div { min-width: 0; }
+.sheet .hd h3 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
+.x { border: 0; background: var(--surface-2); width: 40px; height: 40px; border-radius: 999px; font-size: 20px; flex: none; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-width: 0; }
+.fact .k { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.fact .v { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; }
+.msg { width: 100%; min-height: 120px; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface); resize: vertical; font-size: 15px; }
+.timeline .it { display: grid; grid-template-columns: 84px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.timeline .it > span { min-width: 0; overflow-wrap: anywhere; }
+.timeline .it:last-child { border-bottom: 0; }
+.timeline .dd { color: var(--muted); }
+.res { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.res button { min-height: 48px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-weight: 600; }
+.res button:hover { border-color: var(--accent); }
+.inline { display: grid; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field label, .lab { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+input[type=number], input[type=text], select.in { width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font-size: 15px; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.warnbox { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); font-size: 14px; }
+.warnbox b { color: var(--warn); }
+.okbox { padding: 10px 12px; border-radius: 10px; background: var(--ok-soft); font-size: 14px; }
+.okbox b { color: var(--ok); }
+
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.offer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; display: grid; }
+.offer .art { aspect-ratio: 16 / 9; max-width: 100%; display: grid; place-items: center; text-align: center; padding: 12px; font-family: var(--display); font-weight: 800; font-size: 20px; color: #fff; line-height: 1.1; }
+.offer .art img { width: 100%; height: 100%; object-fit: cover; }
+.offer .bd { padding: 12px; display: grid; gap: 6px; }
+.upload { position: relative; border: 2px dashed var(--line); border-radius: var(--r); display: grid; place-items: center; text-align: center; padding: 18px; gap: 4px; font-weight: 700; min-height: 140px; cursor: pointer; background: var(--surface); }
+.upload small { font-weight: 400; color: var(--muted); }
+.upload input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.upload.big { min-height: 200px; font-size: 18px; border-color: var(--accent); }
+
+.ap { background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--warn); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; }
+.ap.ok { border-left-color: var(--ok); } .ap.no { border-left-color: var(--bad); }
+.ap .h { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ap .meta { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; }
+.alert { display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.alert .dot { width: 10px; height: 10px; border-radius: 999px; margin-top: 5px; }
+.empty { text-align: center; color: var(--muted); padding: 20px; border: 1.5px dashed var(--line); border-radius: var(--r); }
+svg text { fill: var(--muted); font-family: var(--body); font-size: 11px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 30; background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 999px; font-weight: 600; max-width: calc(100% - 32px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
+.steps { display: grid; gap: 10px; counter-reset: s; }
+.steps li { list-style: none; display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+.steps li::before { counter-increment: s; content: counter(s); width: 28px; height: 28px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+.steps { padding: 0; margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top gut"><div class="wrap">
+  <div class="brand">
+    <h1>Motor de <span>Recompras</span></h1>
+    <span class="dataTag num" id="dataTag">Sin datos cargados</span>
+  </div>
+  <div class="roles" role="toolbar" aria-label="Ver como" id="roles" hidden>
+    <span class="lbl">Ver como</span>
+    <button type="button" data-role="vendedor" aria-pressed="true">Vendedor</button>
+    <button type="button" data-role="supervisor" aria-pressed="false">Supervisor</button>
+    <button type="button" data-role="marketing" aria-pressed="false">Marketing</button>
+    <button type="button" data-role="duenio" aria-pressed="false">Dueño</button>
+    <button type="button" data-role="reglas" aria-pressed="false">Reglas</button>
+    <button type="button" data-role="datos" aria-pressed="false">Datos</button>
+  </div>
+</div></header>
+
+<main class="gut"><div class="wrap" id="app"></div></main>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><div class="in" id="sheetIn"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const gs = (n) => 'Gs ' + Math.round(n || 0).toLocaleString('es-PY');
+  const gsM = (n) => 'Gs ' + (n / 1e6).toLocaleString('es-PY', { maximumFractionDigits: 1 }) + ' M';
+  const pct = (n) => (isFinite(n) ? (Math.round(n * 1000) / 10).toLocaleString('es-PY') : '0') + '%';
+  const DAY = 864e5;
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  function toast(m) { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 2800); }
+
+  // ===================== REGLAS (supuestos editables) =====================
+  const DEF_REGLAS = {
+    reposicion: [
+      { nombre: 'Skincare', match: 'skincare', dias: 45, aviso: 7 },
+      { nombre: 'Tintas', match: 'tintas', dias: 30, aviso: 5 },
+      { nombre: 'Toners', match: 'toners', dias: 60, aviso: 7 },
+      { nombre: 'Perfumes', match: 'perfume', dias: 90, aviso: 10 },
+      { nombre: 'Belleza y salud', match: 'belleza', dias: 45, aviso: 7 },
+    ],
+    complementos: [
+      { si: 'celulares', ofrecer: ['Cargadores portátiles', 'Auriculares', 'Relojes inteligentes'], desde: 2, hasta: 21 },
+      { si: 'notebooks', ofrecer: ['Mouses', 'Monitores', 'Teclados'], desde: 2, hasta: 30 },
+      { si: 'televisores', ofrecer: ['Soportes para TV', 'Parlantes'], desde: 1, hasta: 21 },
+      { si: 'monitores', ofrecer: ['UPS', 'Soportes para monitores'], desde: 2, hasta: 30 },
+      { si: 'impresoras', ofrecer: ['Tintas', 'Toners'], desde: 15, hasta: 45 },
+      { si: 'videojuegos', ofrecer: ['Controles', 'Auriculares Gaming'], desde: 2, hasta: 30 },
+      { si: 'auriculares gaming', ofrecer: ['Mouses Gaming', 'Teclados'], desde: 3, hasta: 30 },
+    ],
+    inactivo: 120,
+    fatiga: 7,
+    listaDiaria: 25,
+  };
+  let REGLAS = JSON.parse(JSON.stringify(DEF_REGLAS));
+  try { const r = JSON.parse(store.get('mr-reglas') || 'null'); if (r && r.reposicion) REGLAS = r; } catch (e) {}
+  const saveReglas = () => store.set('mr-reglas', JSON.stringify(REGLAS));
+
+  const MOTIVO = {
+    reposicion: { t: 'Reposición', c: 't-reposicion' },
+    complemento: { t: 'Complemento', c: 't-complemento' },
+    reactivar: { t: 'Reactivar', c: 't-reactivar' },
+    afinidad: { t: 'Afinidad', c: 't-afinidad' },
+  };
+
+  // ===================== ESTADO =====================
+  let ORD = [];            // pedidos normalizados
+  let PREV = [];           // pedidos anteriores, para sumar un archivo nuevo
+  let CL = [];             // clientes
+  let OPS = [];            // oportunidades
+  let STATS = null;        // agregados
+  let TOP = {};            // categoría -> {prod, precio}
+  let role = 'vendedor';
+  let vendSel = store.get('mr-vend') || '';
+  let filtro = 'todos';
+  let soloEmpresas = false;
+  let resultados = {};     // tel -> {estado, fecha}
+  try { resultados = JSON.parse(store.get('mr-res') || '{}') || {}; } catch (e) {}
+  const saveRes = () => store.set('mr-res', JSON.stringify(resultados));
+  const aprobaciones = [];
+  const ofertas = [];
+  const HOY = new Date(); HOY.setHours(12, 0, 0, 0);
+
+  // ===================== CARGA DEL EXCEL =====================
+  const COLS = {
+    fecha: ['fecha'], cliente: ['cliente'], tel: ['telefono', 'teléfono', 'celular'], vend: ['vendedor'], cat: ['categoria', 'categoría'],
+    marca: ['marca'], prods: ['productos', 'producto'], total: ['total'], pago: ['metedod de pago', 'metodo de pago', 'método de pago'],
+    entrega: ['delivery', 'entrega'], mkt: ['marketplace', 'canal'], estado: ['estado'],
+    pedido: ['pedido', 'numero de pedido', 'nro de pedido', 'nro pedido', 'n° pedido', 'nº pedido', 'id pedido', 'id', 'orden', 'order', 'order id'],
+    variante: ['variante', 'variantes', 'id variante', 'ids variantes', 'codigo variante', 'sku', 'skus', 'variant', 'variant id'],
+  };
+  const ANULADO = /cancel|devuel|devoluc|reembols|anulad|rechaz/i;
+  let ANULADOS = 0, ANULADOS_ID = [];
+  function parseFecha(v) {
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === 'number') return Math.round((v - 25569) * DAY);
+    const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (!m) return NaN;
+    return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 12), +(m[5] || 0)).getTime();
+  }
+  function parseProds(s, vars) {
+    // Productos y variantes vienen en el mismo orden, separados por ";"
+    const vs = String(vars ?? '').split(/;\s*/).map((v) => v.trim());
+    return String(s || '').split(/;\s*/).map((p) => p.trim()).filter(Boolean).map((p, i) => {
+      const m = p.match(/^(\d+)\s*x\s*(.+)$/i);
+      const it = m ? { q: +m[1], n: m[2].trim() } : { q: 1, n: p };
+      if (vs[i]) it.v = vs[i];
+      return it;
+    });
+  }
+  const pkey = (p) => (p.v ? 'v:' + p.v : norm(p.n));
+  function telKey(t) {
+    let d = String(t || '').replace(/\D/g, '');
+    if (d.startsWith('0') && d.length >= 9) d = '595' + d.slice(1);
+    return d;
+  }
+  function telDudoso(d) { return !d || d.length < 9 || /(\d)\1{5,}/.test(d.slice(3)) || /0000$/.test(d); }
+  const EMPRESA = /\b(s\.?\s?a\.?|s\.?r\.?l\.?|e\.?i\.?r\.?l\.?|ltda|universidad|colegio|cisa|sociedad|cooperativa|ministerio|municipalidad|fundacion|instituto|banco|clinica|sanatorio|hotel)\b/i;
+
+  function cargarFilas(rows) {
+    const head = rows[0].map((h) => norm(h));
+    const idx = {};
+    for (const [k, cands] of Object.entries(COLS)) idx[k] = head.findIndex((h) => cands.includes(h));
+    const falta = ['fecha', 'cliente', 'tel', 'total'].filter((k) => idx[k] < 0);
+    if (falta.length) throw new Error('Faltan columnas: ' + falta.join(', ') + '. Columnas del archivo: ' + rows[0].filter(Boolean).join(', '));
+    const g = (r, k) => (idx[k] >= 0 ? r[idx[k]] : null);
+    const out = new Map(); let sinId = 0; ANULADOS = 0; ANULADOS_ID = [];
+    for (const r of rows.slice(1)) {
+      const f = parseFecha(g(r, 'fecha'));
+      if (!isFinite(f)) continue;
+      if (ANULADO.test(String(g(r, 'estado') || ''))) { ANULADOS++; const aid = String(g(r, 'pedido') ?? '').trim(); if (aid) ANULADOS_ID.push(aid); continue; }
+      const id = String(g(r, 'pedido') ?? '').trim();
+      out.set(id ? 'p:' + id : 'x' + (sinId++), {
+        id: id || null,
+        f, cli: String(g(r, 'cliente') || '').replace(/\s+/g, ' ').trim(), tel: telKey(g(r, 'tel')),
+        vend: String(g(r, 'vend') || '').replace(/\s+/g, ' ').trim(), cat: String(g(r, 'cat') || '').trim(),
+        marca: String(g(r, 'marca') || '').trim(), prods: parseProds(g(r, 'prods'), g(r, 'variante')), total: Number(g(r, 'total')) || 0,
+        pago: String(g(r, 'pago') || '').trim(), mkt: String(g(r, 'mkt') || '').trim() || 'Mercado Digital', estado: String(g(r, 'estado') || '').trim(),
+      });
+    }
+    return [...out.values()];
+  }
+
+  // ===================== MOTOR =====================
+  function procesar() {
+    ORD.sort((a, b) => a.f - b.f);
+    const vendNames = new Set(ORD.map((o) => norm(o.vend)).filter(Boolean));
+    // Pedidos sin vendedor: los vendió la web o un marketplace
+    ORD.forEach((o) => { o.auto = !o.vend; o.vendera = o.vend || (o.mkt === 'Mercado Digital' ? 'Web directa' : o.mkt); });
+    // Precio por producto: exacto si el pedido tiene un solo producto; si tiene varios, se reparte el total
+    // según el precio de cada producto cuando se vendió solo (estimado)
+    const ref = {};
+    ORD.forEach((o) => { if (o.prods.length === 1) { const k = pkey(o.prods[0]); (ref[k] ||= []).push(o.total / o.prods[0].q); } });
+    const med = (a) => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const refP = {}; for (const [k, a] of Object.entries(ref)) refP[k] = med(a);
+    ORD.forEach((o) => {
+      if (o.prods.length === 1) { o.prods[0].pu = o.total / o.prods[0].q; o.prods[0].est = false; return; }
+      const w = o.prods.map((p) => (refP[pkey(p)] || 0) * p.q);
+      const sw = w.reduce((s, x) => s + x, 0);
+      o.prods.forEach((p, i) => { p.pu = sw > 0 && w.every((x) => x > 0) ? (o.total * w[i] / sw) / p.q : o.total / o.prods.reduce((s, x) => s + x.q, 0); p.est = true; });
+    });
+    // Producto más vendido por categoría (para sugerir algo concreto)
+    const pc = {};
+    ORD.forEach((o) => { const p = o.prods[0]; if (!p || EMPRESA.test(o.cli) || o.prods.reduce((s, x) => s + x.q, 0) > 3) return; const k = norm(o.cat); const n = p.n; (pc[k] ||= {}); (pc[k][n] ||= { c: 0, sum: 0 }); pc[k][n].c += 1; pc[k][n].sum += p.pu; });
+    TOP = {};
+    for (const [k, m] of Object.entries(pc)) { const best = Object.entries(m).sort((a, b) => b[1].c - a[1].c)[0]; TOP[k] = { prod: best[0], precio: best[1].sum / best[1].c, ventas: best[1].c }; }
+
+    const by = new Map();
+    ORD.forEach((o) => { const k = o.tel || 'sin-' + norm(o.cli); if (!by.has(k)) by.set(k, []); by.get(k).push(o); });
+    CL = [];
+    for (const [tel, os] of by) {
+      const last = os[os.length - 1];
+      const vendedor = [...os].reverse().find((o) => o.vend)?.vend || last.vendera;
+      const nombre = last.cli || os.find((o) => o.cli)?.cli || 'Sin nombre';
+      const total = os.reduce((s, o) => s + o.total, 0);
+      CL.push({
+        tel, nombre, os, last, vendedor, total, n: os.length, ticket: total / os.length,
+        dias: Math.floor((HOY - last.f) / DAY), cats: new Set(os.map((o) => norm(o.cat))),
+        empresa: EMPRESA.test(nombre), interno: vendNames.has(norm(nombre)), dudoso: telDudoso(tel),
+        mkt: last.mkt,
+      });
+    }
+    // Afinidad: categoría A -> B entre clientes que compraron ambas
+    const co = {}, base = {};
+    CL.forEach((c) => { if (c.empresa || c.interno || c.dudoso) return; const cs = [...c.cats]; cs.forEach((a) => { base[a] = (base[a] || 0) + 1; cs.forEach((b) => { if (a !== b) { (co[a] ||= {}); co[a][b] = (co[a][b] || 0) + 1; } }); }); });
+
+    OPS = [];
+    for (const c of CL) {
+      if (c.interno || c.dudoso) continue;
+      const lastCat = norm(c.last.cat);
+      let op = null;
+      // 1) Complemento
+      for (const r of REGLAS.complementos) {
+        if (lastCat.includes(norm(r.si)) && c.dias >= r.desde && c.dias <= r.hasta) {
+          const cand = r.ofrecer.map((x) => norm(x)).find((x) => !c.cats.has(x) && TOP[x]) || r.ofrecer.map((x) => norm(x)).find((x) => TOP[x]);
+          const t = cand ? TOP[cand] : null;
+          const prog = (c.dias - r.desde) / Math.max(1, r.hasta - r.desde);
+          op = { tipo: 'complemento', prob: 0.25 * (1 - prog * 0.5), prod: t ? t.prod : r.ofrecer.join(', '), precio: t ? t.precio : c.ticket * 0.2,
+            why: `Compró ${cortar(c.last.prods[0]?.n || c.last.cat)} hace ${c.dias} días. Le falta ${r.ofrecer[0].toLowerCase()} o similar.` };
+          break;
+        }
+      }
+      // 2) Reposición
+      if (!op) {
+        for (const r of REGLAS.reposicion) {
+          const ordsCat = c.os.filter((o) => norm(o.cat).includes(norm(r.match)));
+          if (!ordsCat.length) continue;
+          const lo = ordsCat[ordsCat.length - 1];
+          const d = Math.floor((HOY - lo.f) / DAY);
+          if (d >= r.dias - r.aviso && d <= r.dias + 45) {
+            const cerca = 1 - Math.min(1, Math.abs(d - r.dias) / r.dias);
+            const repite = ordsCat.length > 1 ? 0.12 : 0;
+            const p = lo.prods[0];
+            op = { tipo: 'reposicion', prob: 0.22 + 0.15 * cerca + repite, prod: p ? p.n : r.nombre, precio: p ? p.pu : lo.total,
+              why: `Compró ${cortar(p ? p.n : r.nombre)} hace ${d} días. Dura unos ${r.dias} días${ordsCat.length > 1 ? ' y ya lo recompró ' + (ordsCat.length - 1) + ' vez' + (ordsCat.length > 2 ? 'es' : '') : ''}.` };
+            break;
+          }
+        }
+      }
+      // 3) Reactivar: compró 2+ veces y se fue
+      if (!op && c.n >= 2 && c.dias >= REGLAS.inactivo) {
+        // Durable: ofrecer su complemento. Consumible: el mismo producto. Si no, lo más vendido de su categoría.
+        const rc = REGLAS.complementos.find((r) => lastCat.includes(norm(r.si)));
+        const cc = rc && rc.ofrecer.map((x) => norm(x)).find((x) => !c.cats.has(x) && TOP[x]);
+        const esRepo = REGLAS.reposicion.some((r) => lastCat.includes(norm(r.match)));
+        const lp = c.last.prods[0];
+        const t = cc ? TOP[cc] : esRepo && lp ? { prod: lp.n, precio: lp.pu } : TOP[lastCat];
+        op = { tipo: 'reactivar', prob: 0.08 + 0.02 * Math.min(c.n, 6), prod: t ? t.prod : lp?.n || c.last.cat, precio: Math.min(t ? t.precio : c.ticket, c.ticket),
+          why: `Compró ${c.n} veces (${gs(c.total)} en total). Lleva ${c.dias} días sin comprar.` };
+      }
+      // 4) Afinidad por datos
+      if (!op && c.dias >= 20 && c.dias <= 200) {
+        const m = co[lastCat];
+        if (m) {
+          const best = Object.entries(m).filter(([b, n]) => n >= 3 && !c.cats.has(b) && TOP[b] && TOP[b].precio <= Math.max(c.ticket * 2, 300000)).sort((a, b) => b[1] - a[1])[0];
+          if (best) {
+            const ratio = best[1] / base[lastCat];
+            op = { tipo: 'afinidad', prob: Math.min(0.2, 0.05 + ratio), prod: TOP[best[0]].prod, precio: TOP[best[0]].precio,
+              why: `${best[1]} clientes que compraron ${c.last.cat.toLowerCase()} también compraron ${best[0]}.` };
+          }
+        }
+      }
+      if (op) { op.c = c; op.ve = op.prob * op.precio; OPS.push(op); }
+    }
+    const maxVe = Math.max(1, ...OPS.map((o) => o.ve));
+    OPS.forEach((o) => { o.score = Math.max(1, Math.round(40 + 60 * Math.sqrt(o.ve / maxVe) * (0.6 + o.prob))); o.score = Math.min(99, o.score); });
+    OPS.sort((a, b) => b.ve - a.ve);
+
+    // Agregados
+    const tot = ORD.reduce((s, o) => s + o.total, 0);
+    const b2c = CL.filter((c) => !c.interno && !c.dudoso);
+    const rec = b2c.filter((c) => c.n > 1);
+    const meses = {};
+    ORD.forEach((o) => { const d = new Date(o.f); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); (meses[k] ||= { total: 0, rec: 0, n: 0 }); meses[k].total += o.total; meses[k].n++; });
+    // Ingresos de clientes que ya habían comprado antes
+    const vistos = new Set();
+    ORD.forEach((o) => { const k = o.tel; const d = new Date(o.f); const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); if (vistos.has(k)) meses[mk].rec += o.total; vistos.add(k); });
+    const recIng = Object.values(meses).reduce((s, m) => s + m.rec, 0);
+    const vistosP = new Set(); let recP = 0, totP = 0;
+    ORD.forEach((o) => { if (EMPRESA.test(o.cli)) return; totP += o.total; if (vistosP.has(o.tel)) recP += o.total; vistosP.add(o.tel); });
+    const topCli = [...CL].sort((a, b) => b.total - a.total);
+    const sinVend = ORD.filter((o) => o.auto);
+    const porMkt = {};
+    ORD.forEach((o) => { porMkt[o.mkt] = (porMkt[o.mkt] || 0) + 1; });
+    STATS = {
+      tot, n: ORD.length, desde: ORD[0].f, hasta: ORD[ORD.length - 1].f, clientes: CL.length, b2c: b2c.length, rec: rec.length,
+      tasaRec: rec.length / Math.max(1, b2c.length), meses, recIng, recP, totP, topCli, sinVend: sinVend.length, porMkt,
+      internos: CL.filter((c) => c.interno), dudosos: CL.filter((c) => c.dudoso), empresas: CL.filter((c) => c.empresa),
+    };
+    const vs = [...new Set(CL.map((c) => c.vendedor))];
+    const humanos = new Set(ORD.filter((o) => o.vend).map((o) => o.vend));
+    STATS.humanos = humanos;
+    if (!vendSel || !vs.includes(vendSel)) vendSel = vs.filter((v) => humanos.has(v)).sort((a, b) => CL.filter((c) => c.vendedor === b).length - CL.filter((c) => c.vendedor === a).length)[0] || '';
+    $('dataTag').textContent = `${STATS.n.toLocaleString('es-PY')} pedidos · ${fechaCorta(STATS.desde)} al ${fechaCorta(STATS.hasta)}`;
+    $('roles').hidden = false;
+  }
+  const cortar = (s, n = 60) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; };
+  const fechaCorta = (t) => new Date(t).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  // ===================== NAVEGACIÓN =====================
+  document.querySelectorAll('.roles button').forEach((b) => b.addEventListener('click', () => {
+    role = b.dataset.role;
+    document.querySelectorAll('.roles button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    render(); window.scrollTo(0, 0);
+  }));
+  function render() {
+    const app = $('app');
+    if (!ORD.length) { app.innerHTML = vCarga(); wireCarga(app); return; }
+    app.innerHTML = { vendedor: vVendedor, supervisor: vSupervisor, marketing: vMarketing, duenio: vDuenio, reglas: vReglas, datos: vDatos }[role]();
+    (wire[role] || (() => {}))(app);
+  }
+
+  // ===================== PANTALLA DE CARGA =====================
+  function vCarga(err) {
+    return `<section class="view" style="max-width:720px;margin:0 auto">
+      <div class="hdr"><h2 class="sec">Cargá los pedidos para empezar</h2>
+      <p class="sub">Subí el Excel de pedidos que exportás del admin. El sistema arma la lista de recompras de cada vendedor, el tablero del dueño y los segmentos de Marketing.</p></div>
+      <label class="upload big" for="fileOrd">Elegir Excel de pedidos<small>.xlsx o .csv · columnas Fecha, Cliente, Teléfono, Vendedor, Categoria, Marca, Productos, Total</small><input type="file" id="fileOrd" accept=".xlsx,.xls,.csv"></label>
+      <p class="note" id="cargaMsg" ${err ? '' : 'hidden'} style="color:var(--bad);font-weight:600">${esc(err || '')}</p>
+      <div class="card">
+        <h2 class="sec">Tus datos no salen de este dispositivo</h2>
+        <ol class="steps">
+          <li><span>El archivo se lee en tu navegador. No se sube a ningún servidor ni queda escrito en esta página.</span></li>
+          <li><span>Queda guardado solo en este celular o computadora, para que no tengas que subirlo cada vez. Lo podés borrar desde la pestaña Datos.</span></li>
+          <li><span>Por eso podés compartir el link con cualquiera: sin el archivo, no ve ningún cliente.</span></li>
+        </ol>
+      </div>
+    </section>`;
+  }
+  function wireCarga(app) {
+    $('fileOrd').addEventListener('change', async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        if (typeof XLSX === 'undefined') throw new Error('No cargó el lector de Excel. Recargá la página.');
+        const buf = await f.arrayBuffer();
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(new TextDecoder('utf-8').decode(buf), { type: 'string' }) : XLSX.read(buf, { type: 'array', cellDates: false });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+        const nuevos = cargarFilas(rows);
+        if (!nuevos.length) throw new Error('No encontré pedidos con fecha válida en el archivo.');
+        // Si los pedidos traen número, el archivo nuevo se suma al anterior sin duplicar
+        let resumen = `${nuevos.length.toLocaleString('es-PY')} pedidos cargados`;
+        if (PREV.length && nuevos.every((o) => o.id) && PREV.every((o) => o.id)) {
+          const m = new Map(PREV.map((o) => ['p:' + o.id, o]));
+          let alta = 0; nuevos.forEach((o) => { if (!m.has('p:' + o.id)) alta++; m.set('p:' + o.id, o); });
+          ANULADOS_ID.forEach((id) => m.delete('p:' + id)); // un pedido cancelado después se saca
+          ORD = [...m.values()];
+          resumen = `${alta.toLocaleString('es-PY')} pedidos nuevos, ${(nuevos.length - alta).toLocaleString('es-PY')} ya estaban. Total: ${ORD.length.toLocaleString('es-PY')}`;
+        } else ORD = nuevos;
+        PREV = [];
+        if (ANULADOS) resumen += ` · ${ANULADOS} cancelados o devueltos quedaron afuera`;
+        const ok = store.set('mr-ord', JSON.stringify(ORD));
+        procesar(); role = 'duenio';
+        document.querySelectorAll('.roles button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.role === role)));
+        render();
+        toast(`Listo: ${resumen}${ok ? '' : ' (no se pudieron guardar en este dispositivo)'}`);
+      } catch (ex) { app.innerHTML = vCarga(ex.message || String(ex)); wireCarga(app); }
+    });
+  }
+
+  // ===================== VENDEDOR =====================
+  function opsDe(v) { return OPS.filter((o) => o.c.vendedor === v && (!soloEmpresas || o.c.empresa)); }
+  function vVendedor() {
+    const vendedores = [...new Set(CL.map((c) => c.vendedor))].sort((a, b) => (STATS.humanos.has(a) ? 0 : 1) - (STATS.humanos.has(b) ? 0 : 1) || a.localeCompare(b));
+    const mias = opsDe(vendSel);
+    const visibles = mias.filter((o) => { const r = resultados[o.c.tel]; return !r || r.estado === 'volver' || (HOY - r.t) / DAY > REGLAS.fatiga || r.t > HOY - 1 * DAY; });
+    const lista = visibles.filter((o) => filtro === 'todos' || o.tipo === filtro).slice(0, REGLAS.listaDiaria);
+    const hechos = mias.filter((o) => resultados[o.c.tel] && (HOY - resultados[o.c.tel].t) / DAY < 1).length;
+    const ventas = mias.filter((o) => resultados[o.c.tel]?.estado === 'compro').length;
+    const cartera = CL.filter((c) => c.vendedor === vendSel).length;
+    const pot = lista.reduce((s, o) => s + o.ve, 0);
+    const cnt = (t) => visibles.filter((o) => o.tipo === t).length;
+    return `<section class="view">
+      <div class="goal">
+        <div class="row">
+          <div class="field" style="min-width:0"><label for="vSel" style="color:inherit;opacity:.85">Vendedor</label>
+            <select id="vSel">${vendedores.map((v) => `<option value="${esc(v)}" ${v === vendSel ? 'selected' : ''}>${STATS.humanos.has(v) ? '' : 'Sin vendedor · '}${esc(v)} (${CL.filter((c) => c.vendedor === v).length})</option>`).join('')}</select></div>
+          <div><div class="mut">Ventas potenciales en tu lista de hoy</div><div class="big num">${gs(pot)}</div></div>
+        </div>
+        <div class="stats num"><span>Cartera: <b>${cartera.toLocaleString('es-PY')}</b> clientes</span><span>Oportunidades abiertas: <b>${visibles.length}</b></span><span>Contactados hoy: <b>${hechos}</b></span><span>Ventas registradas: <b>${ventas}</b></span></div>
+      </div>
+      ${!STATS.humanos.has(vendSel) ? `<div class="warnbox"><b>Clientes de ${esc(vendSel)}.</b> Compraron solos, sin vendedor. Nadie les hace seguimiento hasta que el supervisor los reparta.</div>` : ''}
+      <div class="grid2">
+        <div class="view">
+          <div class="hdr"><h2 class="sec">Tu lista de hoy</h2><p class="sub">Los ${REGLAS.listaDiaria} clientes con más venta esperada (chance × precio). No aparecen los que contactaste en los últimos ${REGLAS.fatiga} días.</p></div>
+          <div class="chips" role="group" aria-label="Filtrar lista">
+            ${[['todos', 'Todos', visibles.length], ['reposicion', 'Reposición', cnt('reposicion')], ['complemento', 'Complemento', cnt('complemento')], ['reactivar', 'Reactivar', cnt('reactivar')], ['afinidad', 'Afinidad', cnt('afinidad')]]
+              .map(([k, l, n]) => `<button type="button" class="chip" data-f="${k}" aria-pressed="${filtro === k}">${l} · ${n}</button>`).join('')}
+            <button type="button" class="chip" id="chEmp" aria-pressed="${soloEmpresas}">Solo empresas</button>
+          </div>
+          <div class="list">${lista.map(cardOp).join('') || '<div class="empty">No hay oportunidades con estos filtros. Probá con otro vendedor o con "Todos".</div>'}</div>
+        </div>
+        <div class="view">
+          <div class="card">
+            <h2 class="sec">Ofertas de Marketing</h2>
+            ${ofertas.length ? ofertas.map((o) => `<div class="inline"><b>${esc(o.titulo)}</b><span class="note">${esc(o.desc)}</span></div>`).join('') : '<p class="note">Todavía no hay ofertas cargadas. Marketing las sube desde su pestaña.</p>'}
+          </div>
+          <div class="card">
+            <h2 class="sec">Tus descuentos pedidos</h2>
+            ${(() => { const ds = aprobaciones.filter((a) => a.vend === vendSel); return ds.length ? ds.map((a) => `<div class="tags" style="justify-content:space-between"><span>${esc(a.cli)} · ${a.pct}%</span><span class="tag ${a.estado === 'aprobado' ? 't-reposicion' : a.estado === 'rechazado' ? 't-bad' : 't-reactivar'}">${a.estado === 'pendiente' ? 'Esperando al dueño' : a.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span></div>`).join('') : '<p class="note">Si un cliente pide un descuento que no está en las ofertas, pedilo desde su ficha. Lo aprueba el dueño.</p>'; })()}
+          </div>
+          <div class="card">
+            <h2 class="sec">Cómo se arma la lista</h2>
+            <p class="note"><b>Complemento:</b> compró hace pocos días algo que necesita accesorio (celular, notebook, TV, monitor, impresora).<br><b>Reposición:</b> se le está terminando un producto que se gasta (skincare, tintas, perfumes).<br><b>Reactivar:</b> compró 2 o más veces y lleva más de ${REGLAS.inactivo} días sin volver.<br><b>Afinidad:</b> otros clientes que compraron lo mismo también compraron otra categoría.<br>La chance de compra es una estimación inicial. Se ajusta cuando haya resultados reales registrados.</p>
+          </div>
+        </div>
+      </div>
+    </section>`;
+  }
+  function cardOp(o) {
+    const c = o.c, m = MOTIVO[o.tipo], r = resultados[c.tel];
+    const est = r && { compro: ['Compró', 't-reposicion'], no_contesta: ['No contesta', 't-reactivar'], no_interesa: ['No le interesa', 't-bad'], volver: ['Volver a llamar', 't-complemento'] }[r.estado];
+    return `<button type="button" class="cli ${r && r.estado !== 'volver' ? 'done' : ''}" data-tel="${esc(c.tel)}">
+      <div class="h"><div><div class="nm">${esc(c.nombre)}</div><div class="why">${esc(o.why)}</div></div><div class="score num" title="Prioridad">${o.score}<small>puntos</small></div></div>
+      <div class="tags"><span class="tag ${m.c}">${m.t}</span>${c.empresa ? '<span class="tag">Empresa</span>' : ''}${c.mkt !== 'Mercado Digital' ? `<span class="tag t-reactivar">Vino por ${esc(c.mkt)}</span>` : ''}${est ? `<span class="tag ${est[1]}">${est[0]}</span>` : ''}</div>
+      <div class="sug num"><span>Ofrecer: <b>${esc(cortar(o.prod, 70))}</b></span><span>${gs(o.precio)} · chance ${Math.round(o.prob * 100)}%</span></div>
+    </button>`;
+  }
+  function mensaje(o) {
+    const nom = (o.c.nombre.split(' ')[0] || '').replace(/^\w/, (x) => x.toUpperCase());
+    const yo = (vendSel || 'Mercado Digital').split(' ')[0].replace(/^\w/, (x) => x.toUpperCase());
+    const prod = cortar(o.prod, 70);
+    return {
+      reposicion: `¡Hola ${nom}! Soy ${yo} de Mercado Digital. Calculo que ya se te está terminando ${prod}. ¿Querés que te lo reserve y te lo enviamos?`,
+      complemento: `¡Hola ${nom}! Soy ${yo} de Mercado Digital. ¿Qué tal tu compra? Para aprovecharla al máximo te recomiendo ${prod}. ¿Te paso el precio?`,
+      reactivar: `¡Hola ${nom}! Soy ${yo} de Mercado Digital. Hace tiempo que no te vemos. Te cuento que tenemos ${prod} disponible. ¿Te interesa?`,
+      afinidad: `¡Hola ${nom}! Soy ${yo} de Mercado Digital. Por lo que venís comprando, creo que te puede servir ${prod}. ¿Te cuento más?`,
+    }[o.tipo];
+  }
+  function abrirFicha(tel) {
+    const o = OPS.find((x) => x.c.tel === tel); if (!o) return;
+    const c = o.c;
+    const freq = c.n > 1 ? Math.round((c.last.f - c.os[0].f) / DAY / (c.n - 1)) : null;
+    const r = resultados[c.tel];
+    const ap = aprobaciones.find((a) => a.tel === c.tel);
+    const txt = mensaje(o);
+    $('sheetIn').innerHTML = `
+      <div class="grab"></div>
+      <div class="hd"><div><h3 id="sheetTitle">${esc(c.nombre)}</h3><p class="sub num">+${esc(c.tel)} · vendedor ${esc(c.vendedor || 'sin asignar')} · último canal ${esc(c.mkt)}</p></div><button type="button" class="x" data-close aria-label="Cerrar">×</button></div>
+      <div class="tags"><span class="tag ${MOTIVO[o.tipo].c}">${MOTIVO[o.tipo].t}</span><span class="tag">Prioridad ${o.score}</span>${c.empresa ? '<span class="tag">Empresa</span>' : ''}</div>
+      ${c.mkt !== 'Mercado Digital' ? `<div class="warnbox"><b>Vino por ${esc(c.mkt)}.</b> Revisá si las condiciones de ese marketplace permiten contactar al cliente directamente.</div>` : ''}
+      ${r ? `<div class="warnbox"><b>Último resultado:</b> ${esc({ compro: 'compró', no_contesta: 'no contestó', no_interesa: 'no le interesa', volver: 'volver a llamar' }[r.estado])} (${fechaCorta(r.t)}).</div>` : ''}
+      <div class="facts num">
+        <div class="fact"><div class="k">Ticket promedio</div><div class="v">${gs(c.ticket)}</div></div>
+        <div class="fact"><div class="k">Compró en total</div><div class="v">${gs(c.total)}</div></div>
+        <div class="fact"><div class="k">Pedidos</div><div class="v">${c.n}</div></div>
+        <div class="fact"><div class="k">Compra cada</div><div class="v">${freq ? freq + ' días' : 'primera compra'}</div></div>
+        <div class="fact"><div class="k">Última compra</div><div class="v">hace ${c.dias} días</div></div>
+      </div>
+      <div class="card">
+        <span class="lab">Por qué hoy</span><div>${esc(o.why)}</div>
+        <div class="sug num" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:10px">
+          <span style="min-width:0;overflow-wrap:anywhere">Ofrecer <b>${esc(o.prod)}</b></span><span>${gs(o.precio)} · venta esperada ${gs(o.ve)}</span></div>
+        <p class="note">El precio es el promedio vendido en el archivo. El margen se va a mostrar cuando conectemos la API de productos.</p>
+      </div>
+      <div class="card">
+        <span class="lab">Mensaje sugerido (lo podés editar)</span>
+        <textarea class="msg" id="msgTxt">${esc(txt)}</textarea>
+        <div class="btns">
+          <a class="btn btn-wa" id="waLink" href="https://wa.me/${esc(c.tel)}?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Abrir WhatsApp</a>
+          <button type="button" class="btn btn-g" id="copyMsg">Copiar mensaje</button>
+        </div>
+      </div>
+      <div class="card">
+        <span class="lab">¿Cómo te fue?</span>
+        <div class="res"><button type="button" data-res="compro">✔ Compró</button><button type="button" data-res="volver">Volver a llamar</button><button type="button" data-res="no_contesta">No contesta</button><button type="button" data-res="no_interesa">No le interesa</button></div>
+      </div>
+      <div class="card">
+        <span class="lab">Descuento especial</span>
+        ${ap ? `<div class="${ap.estado === 'aprobado' ? 'okbox' : 'warnbox'}"><b>${ap.pct}% pedido:</b> ${ap.estado === 'pendiente' ? 'esperando aprobación del dueño.' : ap.estado === 'aprobado' ? 'aprobado. Ya lo podés ofrecer.' : 'rechazado.'}</div>` : `
+        <div class="row2"><div class="field"><label for="dPct">Porcentaje</label><input type="number" id="dPct" min="1" max="50" value="5" inputmode="numeric"></div>
+        <div class="field"><label for="dMot">Motivo</label><input type="text" id="dMot" placeholder="Ej: cliente frecuente, pide beneficio"></div></div>
+        <p class="note num" id="dImpact"></p>
+        <button type="button" class="btn btn-g" id="dSend">Pedir aprobación al dueño</button>`}
+      </div>
+      <div class="card"><span class="lab">Historial de pedidos</span>
+        <div class="timeline num">${[...c.os].reverse().map((x) => `<div class="it"><span class="dd">${fechaCorta(x.f)}</span><span>${x.prods.map((p) => esc((p.q > 1 ? p.q + ' × ' : '') + p.n) + ` <span class="note">(${gs(p.pu)}${p.est ? ' est.' : ''} c/u)</span>`).join('<br>') || esc(x.cat)}</span><b>${gs(x.total)}</b></div>`).join('')}</div>
+      </div>`;
+    $('sheet').hidden = false; $('scrim').hidden = false;
+    const s = $('sheetIn');
+    s.querySelector('[data-close]').onclick = cerrarFicha;
+    const ta = $('msgTxt');
+    ta.addEventListener('input', () => { $('waLink').href = `https://wa.me/${c.tel}?text=${encodeURIComponent(ta.value)}`; });
+    $('copyMsg').onclick = () => { navigator.clipboard.writeText(ta.value).then(() => toast('Mensaje copiado'), () => { ta.select(); toast('Seleccioná y copiá el texto'); }); };
+    s.querySelectorAll('[data-res]').forEach((b) => b.onclick = () => { resultados[c.tel] = { estado: b.dataset.res, t: Date.now(), vend: vendSel, tipo: o.tipo, prod: o.prod, precio: o.precio }; saveRes(); cerrarFicha(); render(); toast(b.dataset.res === 'compro' ? '¡Venta registrada!' : 'Resultado guardado'); });
+    if (!ap) {
+      const upd = () => { const p = Math.max(0, Math.min(50, Number($('dPct').value) || 0)); $('dImpact').innerHTML = `Con ${p}% el precio baja de <b>${gs(o.precio)}</b> a <b>${gs(o.precio * (1 - p / 100))}</b>: ${gs(o.precio * p / 100)} menos de ganancia por unidad.`; };
+      $('dPct').addEventListener('input', upd); upd();
+      $('dSend').onclick = () => {
+        aprobaciones.unshift({ id: 'a' + Date.now(), tel: c.tel, vend: vendSel || 'Sin vendedor', cli: c.nombre, prod: o.prod, precio: o.precio, pct: Math.max(1, Math.min(50, Number($('dPct').value) || 0)), motivo: $('dMot').value.trim() || 'Sin motivo', estado: 'pendiente' });
+        abrirFicha(c.tel); toast('Pedido enviado. Lo ve el dueño en su pestaña');
+      };
+    }
+  }
+  function cerrarFicha() { $('sheet').hidden = true; $('scrim').hidden = true; }
+  $('scrim').addEventListener('click', cerrarFicha);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarFicha(); });
+
+  const wire = {
+    vendedor(app) {
+      $('vSel').addEventListener('change', (e) => { vendSel = e.target.value; store.set('mr-vend', vendSel); render(); });
+      app.querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { filtro = b.dataset.f; render(); });
+      $('chEmp').onclick = () => { soloEmpresas = !soloEmpresas; render(); };
+      app.querySelectorAll('[data-tel]').forEach((b) => b.onclick = () => abrirFicha(b.dataset.tel));
+    },
+  };
+
+  // ===================== SUPERVISOR =====================
+  function vSupervisor() {
+    const vs = [...new Set(CL.map((c) => c.vendedor))];
+    const rows = vs.map((v) => {
+      const cl = CL.filter((c) => c.vendedor === v);
+      const ops = OPS.filter((o) => o.c.vendedor === v);
+      const res = Object.values(resultados).filter((r) => r.vend === v);
+      const ped = ORD.filter((o) => o.vendera === v);
+      return { v, cartera: cl.length, rec: cl.filter((c) => c.n > 1).length, ops: ops.length, pot: ops.reduce((s, o) => s + o.ve, 0), cont: res.length, ventas: res.filter((r) => r.estado === 'compro').length, ped: ped.length, fact: ped.reduce((s, o) => s + o.total, 0) };
+    }).sort((a, b) => b.fact - a.fact);
+    const sinRows = rows.filter((r) => !STATS.humanos.has(r.v));
+    const sin = sinRows.length ? { ops: sinRows.reduce((s, r) => s + r.ops, 0), pot: sinRows.reduce((s, r) => s + r.pot, 0) } : null;
+    return `<section class="view">
+      <div class="hdr"><h2 class="sec">Equipo de recompras</h2><p class="sub">Cada cliente queda con el vendedor de su última venta. Los que compraron por la web o un marketplace no tienen vendedor: hay que decidir quién los trabaja.</p></div>
+      <div class="kpis num">
+        <div class="kpi"><span class="k">Oportunidades abiertas</span><span class="v">${OPS.length.toLocaleString('es-PY')}</span><span class="d">${gs(OPS.reduce((s, o) => s + o.ve, 0))} de venta esperada</span></div>
+        <div class="kpi"><span class="k">Oportunidades sin vendedor</span><span class="v" style="color:var(--bad)">${sin ? sin.ops : 0}</span><span class="d down">clientes de web y marketplaces</span></div>
+        <div class="kpi"><span class="k">Contactos registrados</span><span class="v">${Object.keys(resultados).length}</span><span class="d">${Object.values(resultados).filter((r) => r.estado === 'compro').length} ventas</span></div>
+        <div class="kpi"><span class="k">Pedidos por web y marketplaces</span><span class="v">${pct(STATS.sinVend / STATS.n)}</span><span class="d down">${STATS.sinVend.toLocaleString('es-PY')} de ${STATS.n.toLocaleString('es-PY')} pedidos</span></div>
+      </div>
+      <div class="card"><h2 class="sec">Por vendedor</h2>
+        <div class="scroll"><table class="t num">
+          <thead><tr><th>Vendedor</th><th class="r">Pedidos</th><th class="r">Facturado</th><th class="r">Cartera</th><th class="r">Recompraron</th><th class="r">Oportunidades</th><th class="r">Venta esperada</th><th class="r">Contactos</th><th class="r">Ventas</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr><td><b>${esc(r.v)}</b>${STATS.humanos.has(r.v) ? '' : ' <span class="tag">sin vendedor</span>'}</td><td class="r">${r.ped}</td><td class="r">${gsM(r.fact)}</td><td class="r">${r.cartera}</td><td class="r">${r.rec} (${pct(r.rec / Math.max(1, r.cartera))})</td><td class="r">${r.ops}</td><td class="r">${gs(r.pot)}</td><td class="r">${r.cont}</td><td class="r">${r.ventas}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="card"><h2 class="sec">Alertas</h2>
+        ${sin && sin.ops ? `<div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>${sin.ops} oportunidades sin dueño</b>, por ${gs(sin.pot)} de venta esperada. Son clientes que compraron por la web o por marketplaces. Si nadie los toma, no se recontactan nunca.</div></div>` : ''}
+        ${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera > 50).map((r) => `<div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${esc(r.v)}</b> tiene ${r.cartera} clientes y ${r.ops} oportunidades abiertas. Con una lista de ${REGLAS.listaDiaria} por día tarda ${Math.ceil(r.ops / REGLAS.listaDiaria)} días hábiles en recorrerlas.</div></div>`).join('')}
+        ${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera <= 5).length ? `<div class="alert"><span class="dot" style="background:var(--muted)"></span><div>${rows.filter((r) => STATS.humanos.has(r.v) && r.cartera <= 5).map((r) => esc(r.v)).join(', ')} tienen 5 clientes o menos. Si siguen en el equipo, conviene pasarles parte de los clientes sin vendedor.</div></div>` : ''}
+      </div>
+    </section>`;
+  }
+
+  // ===================== MARKETING =====================
+  const seg = { cat: '', marca: '', diasMin: 30, diasMax: 365, ticketMin: 0, comprasMin: 1, canal: '', tipo: 'todos' };
+  function segFiltrar() {
+    return CL.filter((c) => !c.interno && !c.dudoso && (!seg.cat || [...c.cats].some((x) => x === norm(seg.cat))) && (!seg.marca || c.os.some((o) => o.marca === seg.marca))
+      && c.dias >= seg.diasMin && c.dias <= seg.diasMax && c.ticket >= seg.ticketMin && c.n >= seg.comprasMin && (!seg.canal || c.mkt === seg.canal)
+      && (seg.tipo === 'todos' || (seg.tipo === 'empresa' ? c.empresa : !c.empresa)));
+  }
+  function vMarketing() {
+    const catsC = {}; ORD.forEach((o) => { catsC[o.cat] = (catsC[o.cat] || 0) + 1; });
+    const cats = Object.entries(catsC).sort((a, b) => b[1] - a[1]).slice(0, 60).map((x) => x[0]);
+    const marC = {}; ORD.forEach((o) => { if (o.marca) marC[o.marca] = (marC[o.marca] || 0) + 1; });
+    const marcas = Object.entries(marC).sort((a, b) => b[1] - a[1]).slice(0, 60).map((x) => x[0]);
+    const canales = Object.keys(STATS.porMkt);
+    return `<section class="view">
+      <div class="hdr"><h2 class="sec">Biblioteca de ofertas</h2><p class="sub">Lo que subas acá lo ven los vendedores en su pantalla.</p></div>
+      <div class="offers">
+        ${ofertas.map((o) => `<div class="offer"><div class="art" style="background:${o.img ? 'var(--surface-2)' : 'linear-gradient(135deg,#1d2a6b,#f39200)'}">${o.img ? `<img src="${o.img}" alt="${esc(o.titulo)}">` : esc(o.titulo)}</div><div class="bd"><b>${esc(o.titulo)}</b><span class="note">${esc(o.desc)}</span></div></div>`).join('')}
+        <div class="card">
+          <div class="field"><label for="oTit">Título de la oferta</label><input type="text" id="oTit" placeholder="Ej: 10% en la 2ª Celimax Retinal"></div>
+          <div class="field"><label for="oDesc">Condiciones</label><input type="text" id="oDesc" placeholder="Ej: válido hasta el 30/11, solo clientes que ya compraron"></div>
+          <label class="upload" for="upFile" style="min-height:90px">Agregar imagen o PDF<small>opcional</small><input type="file" id="upFile" accept="image/*,.pdf"></label>
+          <button type="button" class="btn btn-p" id="oAdd">Publicar oferta</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2 class="sec">Armar un segmento</h2>
+          <p class="note">Filtra sobre los ${STATS.b2c.toLocaleString('es-PY')} clientes reales del archivo.</p>
+          <div class="row2">
+            <div class="field"><label for="sCat">Compró en categoría</label><select class="in" id="sCat"><option value="">Cualquiera</option>${cats.map((c) => `<option ${seg.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+            <div class="field"><label for="sMar">Marca</label><select class="in" id="sMar"><option value="">Cualquiera</option>${marcas.map((c) => `<option ${seg.marca === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sDmin">Días sin comprar, desde</label><input type="number" id="sDmin" value="${seg.diasMin}" min="0"></div>
+            <div class="field"><label for="sDmax">hasta</label><input type="number" id="sDmax" value="${seg.diasMax}" min="0"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sTk">Ticket promedio mínimo (Gs)</label><input type="number" id="sTk" value="${seg.ticketMin}" step="50000"></div>
+            <div class="field"><label for="sCm">Pedidos mínimos</label><input type="number" id="sCm" value="${seg.comprasMin}" min="1"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sCan">Último canal</label><select class="in" id="sCan"><option value="">Todos</option>${canales.map((c) => `<option ${seg.canal === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+            <div class="field"><label for="sTipo">Tipo de cliente</label><select class="in" id="sTipo"><option value="todos">Todos</option><option value="persona" ${seg.tipo === 'persona' ? 'selected' : ''}>Personas</option><option value="empresa" ${seg.tipo === 'empresa' ? 'selected' : ''}>Empresas</option></select></div>
+          </div>
+          <div id="segOut"></div>
+        </div>
+        <div class="card">
+          <h2 class="sec">Qué recompra la gente</h2>
+          <p class="note">Categorías donde los clientes volvieron a comprar la misma categoría, según el archivo.</p>
+          <div class="scroll"><table class="t num"><thead><tr><th>Categoría</th><th class="r">Clientes</th><th class="r">Volvieron</th><th class="r">%</th></tr></thead><tbody>${recompraPorCat().slice(0, 10).map((r) => `<tr><td>${esc(r.cat)}</td><td class="r">${r.cl}</td><td class="r">${r.rep}</td><td class="r">${pct(r.rep / r.cl)}</td></tr>`).join('')}</tbody></table></div>
+          <h2 class="sec">Resultados de campañas</h2>
+          <p class="note">Aparecen cuando los vendedores registran resultados con una oferta. Ventas registradas hasta ahora: ${Object.values(resultados).filter((r) => r.estado === 'compro').length}.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+  function recompraPorCat() {
+    const m = {};
+    CL.forEach((c) => { if (c.interno || c.dudoso) return; const cnt = {}; c.os.forEach((o) => { cnt[o.cat] = (cnt[o.cat] || 0) + 1; }); for (const [k, n] of Object.entries(cnt)) { (m[k] ||= { cat: k, cl: 0, rep: 0 }); m[k].cl++; if (n > 1) m[k].rep++; } });
+    return Object.values(m).filter((x) => x.cl >= 10).sort((a, b) => b.rep - a.rep || b.cl - a.cl);
+  }
+  function pintarSeg() {
+    const r = segFiltrar();
+    const tk = r.length ? r.reduce((s, c) => s + c.ticket, 0) / r.length : 0;
+    $('segOut').innerHTML = `<div class="okbox num"><b>${r.length.toLocaleString('es-PY')} clientes</b> · ticket promedio ${gs(tk)} · compraron ${gsM(r.reduce((s, c) => s + c.total, 0))} en total</div>
+      ${r.length ? `<div class="scroll"><table class="t num"><thead><tr><th>Cliente</th><th>Vendedor</th><th class="r">Pedidos</th><th class="r">Días</th><th class="r">Ticket</th></tr></thead><tbody>${r.sort((a, b) => b.total - a.total).slice(0, 8).map((c) => `<tr><td>${esc(c.nombre)}</td><td>${esc(c.vendedor || '—')}</td><td class="r">${c.n}</td><td class="r">${c.dias}</td><td class="r">${gs(c.ticket)}</td></tr>`).join('')}</tbody></table></div>${r.length > 8 ? `<p class="note">Y ${r.length - 8} más.</p>` : ''}` : ''}`;
+  }
+  wire.marketing = () => {
+    const map = { sCat: 'cat', sMar: 'marca', sDmin: 'diasMin', sDmax: 'diasMax', sTk: 'ticketMin', sCm: 'comprasMin', sCan: 'canal', sTipo: 'tipo' };
+    Object.entries(map).forEach(([id, k]) => $(id).addEventListener('input', () => { const v = $(id).value; seg[k] = ['cat', 'marca', 'canal', 'tipo'].includes(k) ? v : Number(v) || 0; pintarSeg(); }));
+    pintarSeg();
+    let img = null;
+    $('upFile').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; if (f.type.startsWith('image/')) { const rd = new FileReader(); rd.onload = () => { img = rd.result; toast('Imagen lista'); }; rd.readAsDataURL(f); } else toast('PDF adjunto: ' + f.name); });
+    $('oAdd').onclick = () => { const t = $('oTit').value.trim(); if (!t) { toast('Poné un título'); return; } ofertas.unshift({ titulo: t, desc: $('oDesc').value.trim() || 'Sin condiciones cargadas', img }); render(); toast('Oferta publicada. Ya la ven los vendedores'); };
+  };
+
+  // ===================== DUEÑO =====================
+  function chart() {
+    const ks = Object.keys(STATS.meses).sort();
+    const vals = ks.map((k) => STATS.meses[k]);
+    const W = 640, H = 230, pl = 52, pr = 10, pt = 16, pb = 30;
+    const maxV = Math.max(...vals.map((v) => v.total));
+    const step = maxV > 400e6 ? 100e6 : maxV > 200e6 ? 50e6 : 25e6;
+    const max = Math.ceil(maxV / step) * step;
+    const bw = (W - pl - pr) / ks.length;
+    const y = (v) => pt + (H - pt - pb) * (1 - v / max);
+    const ticks = []; for (let t = 0; t <= max; t += step) ticks.push(t);
+    const mes = (k) => ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][+k.slice(5) - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Facturación por mes">
+      ${ticks.map((t) => `<line x1="${pl}" x2="${W - pr}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${y(t) + 4}" text-anchor="end">${t / 1e6}M</text>`).join('')}
+      ${vals.map((v, i) => { const x = pl + i * bw + bw * 0.18, w = bw * 0.64; return `<rect x="${x}" y="${y(v.total)}" width="${w}" height="${y(0) - y(v.total)}" rx="3" fill="var(--accent-soft)"/><rect x="${x}" y="${y(v.rec)}" width="${w}" height="${y(0) - y(v.rec)}" rx="3" fill="var(--accent-2)"/><text x="${pl + i * bw + bw / 2}" y="${H - 10}" text-anchor="middle">${mes(ks[i])}</text>`; }).join('')}
+    </svg>
+    <div class="tags"><span class="tag" style="background:var(--accent-soft);color:var(--accent)">Total facturado</span><span class="tag" style="background:var(--accent-2);color:#1b1200">De clientes que ya habían comprado</span></div>`;
+  }
+  function vDuenio() {
+    const S = STATS;
+    const top1 = S.topCli[0], top5 = S.topCli.slice(0, 5).reduce((s, c) => s + c.total, 0);
+    const ve = OPS.reduce((s, o) => s + o.ve, 0);
+    const porTipo = {}; OPS.forEach((o) => { (porTipo[o.tipo] ||= { n: 0, ve: 0 }); porTipo[o.tipo].n++; porTipo[o.tipo].ve += o.ve; });
+    const mpTot = Object.entries(S.porMkt).filter(([k]) => k !== 'Mercado Digital').reduce((s, [, v]) => s + v, 0);
+    const pend = aprobaciones.filter((a) => a.estado === 'pendiente');
+    return `<section class="view">
+      <div class="hdr"><h2 class="sec">Tablero del dueño</h2><p class="sub num">Datos reales del archivo: ${fechaCorta(S.desde)} al ${fechaCorta(S.hasta)}. Margen pendiente hasta conectar la API de productos.</p></div>
+      <div class="kpis num">
+        <div class="kpi"><span class="k">Facturado en el período</span><span class="v">${gsM(S.tot)}</span><span class="d">${S.n.toLocaleString('es-PY')} pedidos · ticket ${gs(S.tot / S.n)}</span></div>
+        <div class="kpi"><span class="k">Clientes únicos</span><span class="v">${S.b2c.toLocaleString('es-PY')}</span><span class="d">sin internos ni teléfonos dudosos</span></div>
+        <div class="kpi"><span class="k">Tasa de recompra</span><span class="v" style="color:var(--bad)">${pct(S.tasaRec)}</span><span class="d down">${S.rec} clientes compraron más de una vez</span></div>
+        <div class="kpi"><span class="k">Facturado por recompras (personas)</span><span class="v">${pct(S.recP / S.totP)}</span><span class="d">${gsM(S.recP)} de ${gsM(S.totP)}. Con empresas: ${pct(S.recIng / S.tot)}</span></div>
+        <div class="kpi"><span class="k">Venta esperada hoy</span><span class="v">${gsM(ve)}</span><span class="d">${OPS.length} oportunidades abiertas</span></div>
+        <div class="kpi"><span class="k">Concentración</span><span class="v">${pct(top1.total / S.tot)}</span><span class="d down">del total lo compró ${esc(top1.nombre)}</span></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h2 class="sec">Facturación por mes</h2><div style="min-width:0">${chart()}</div></div>
+        <div class="card"><h2 class="sec">Descuentos para aprobar · ${pend.length}</h2>
+          <div class="list">${aprobaciones.map(cardAp).join('') || '<div class="empty">No hay pedidos de descuento. Aparecen cuando un vendedor pide uno desde la ficha de un cliente.</div>'}</div></div>
+      </div>
+      <div class="card"><h2 class="sec">Oportunidades por tipo</h2>
+        <div class="scroll"><table class="t num"><thead><tr><th>Tipo</th><th class="r">Clientes</th><th class="r">Venta esperada</th><th>Qué es</th></tr></thead><tbody>
+          ${['complemento', 'reposicion', 'reactivar', 'afinidad'].map((t) => `<tr><td><span class="tag ${MOTIVO[t].c}">${MOTIVO[t].t}</span></td><td class="r">${porTipo[t]?.n || 0}</td><td class="r">${gs(porTipo[t]?.ve || 0)}</td><td class="w note">${{ complemento: 'Compró hace pocos días algo que necesita accesorio', reposicion: 'Producto que se gasta, cerca de terminarse', reactivar: 'Compró 2 o más veces y dejó de comprar', afinidad: 'Otros clientes con la misma compra sumaron otra categoría' }[t]}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>
+      <div class="card"><h2 class="sec">Lo que dicen los datos</h2>
+        <div class="alert"><span class="dot" style="background:var(--bad)"></span><div><b>Casi nadie vuelve a comprar.</b> Solo ${pct(S.tasaRec)} de los clientes compró más de una vez en ${Math.round((S.hasta - S.desde) / DAY / 30)} meses. Es el problema que este sistema tiene que resolver, y también la oportunidad más grande.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>Un cliente explica ${pct(top1.total / S.tot)} de la facturación.</b> ${esc(top1.nombre)} compró ${gsM(top1.total)}; los 5 primeros suman ${pct(top5 / S.tot)}. Ese volumen es de cuentas empresa y no se repite como la venta a personas: conviene medir la recompra de empresas por separado.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${pct(S.sinVend / S.n)} de los pedidos se vendió solo</b>, por la web o un marketplace, sin vendedor. Esos clientes no tienen a nadie que los recontacte. Hay que decidir quién los trabaja.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--warn)"></span><div><b>${pct(mpTot / S.n)} de los pedidos vino por marketplaces</b> (Tienda Naranja, ContiMarket y otros). Antes de contactarlos por WhatsApp, confirmá que el contrato de cada marketplace lo permite. Si se puede, pasar esa recompra a venta directa ahorra la comisión del marketplace.</div></div>
+        <div class="alert"><span class="dot" style="background:var(--ok)"></span><div><b>Skincare es la mejor base para empezar.</b> ${(recompraPorCat().find((r) => /skincare/i.test(r.cat)) || { rep: 0 }).rep} clientes ya repitieron la categoría sin que nadie los llamara, y un solo producto (Celimax Retinal Shot) concentra la mayoría de las ventas.</div></div>
+      </div>
+    </section>`;
+  }
+  function cardAp(a) {
+    const cls = a.estado === 'aprobado' ? 'ok' : a.estado === 'rechazado' ? 'no' : '';
+    return `<div class="ap ${cls}"><div class="h"><b>${esc(a.vend)} → ${esc(a.cli)}</b><span class="tag ${a.estado === 'pendiente' ? 't-reactivar' : a.estado === 'aprobado' ? 't-reposicion' : 't-bad'}">${a.estado === 'pendiente' ? 'Pendiente' : a.estado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span></div>
+      <div class="meta num"><span>${esc(cortar(a.prod, 60))}</span><span>${gs(a.precio)} → <b>${gs(a.precio * (1 - a.pct / 100))}</b> (${a.pct}%)</span><span>Cede ${gs(a.precio * a.pct / 100)}</span></div>
+      <div class="note">“${esc(a.motivo)}”</div>
+      ${a.estado === 'pendiente' ? `<div class="btns"><button type="button" class="btn btn-ok" data-ap="${a.id}" data-v="aprobado">Aprobar</button><button type="button" class="btn btn-bad" data-ap="${a.id}" data-v="rechazado">Rechazar</button></div>` : ''}</div>`;
+  }
+  wire.duenio = (app) => { app.querySelectorAll('[data-ap]').forEach((b) => b.onclick = () => { aprobaciones.find((x) => x.id === b.dataset.ap).estado = b.dataset.v; render(); toast(b.dataset.v === 'aprobado' ? 'Aprobado. El vendedor ya lo ve' : 'Rechazado'); }); };
+
+  // ===================== REGLAS =====================
+  function vReglas() {
+    return `<section class="view">
+      <div class="hdr"><h2 class="sec">Reglas del motor</h2><p class="sub">Los días de duración son supuestos iniciales. Ajustalos con lo que sepan del producto y el sistema recalcula la lista al instante.</p></div>
+      <div class="grid2">
+        <div class="card"><h2 class="sec">Reposición: cada cuánto se termina</h2>
+          <div class="scroll"><table class="t"><thead><tr><th>Categoría</th><th>Dura (días)</th><th>Avisar antes</th><th class="r">Clientes hoy</th></tr></thead><tbody>
+            ${REGLAS.reposicion.map((r, i) => `<tr><td><b>${esc(r.nombre)}</b></td><td><input type="number" data-rep="${i}" data-k="dias" value="${r.dias}" style="max-width:90px" aria-label="Días ${esc(r.nombre)}"></td><td><input type="number" data-rep="${i}" data-k="aviso" value="${r.aviso}" style="max-width:90px" aria-label="Aviso ${esc(r.nombre)}"></td><td class="r num">${OPS.filter((o) => o.tipo === 'reposicion' && o.c.os.some((x) => norm(x.cat).includes(norm(r.match)))).length}</td></tr>`).join('')}
+          </tbody></table></div>
+          <p class="note">Con más historial, el sistema usa la frecuencia real de cada cliente en lugar de este promedio.</p>
+        </div>
+        <div class="card"><h2 class="sec">Complementos: compró A, ofrecer B</h2>
+          <div class="list">${REGLAS.complementos.map((r) => `<div class="inline"><b>Si compró ${esc(r.si)}</b><span>Ofrecer: ${esc(r.ofrecer.join(', '))}</span><span class="note">Entre el día ${r.desde} y el ${r.hasta} después de la compra</span></div>`).join('')}</div>
+          <p class="note">Estas parejas salen de lo que se vende junto en el archivo (TV con soporte, notebook con monitor, monitor con UPS).</p>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h2 class="sec">Reactivación y cuidado del cliente</h2>
+          <div class="field"><label for="rInact">Considerar inactivo después de (días)</label><input type="number" id="rInact" value="${REGLAS.inactivo}"></div>
+          <div class="field"><label for="rFat">No volver a contactar antes de (días)</label><input type="number" id="rFat" value="${REGLAS.fatiga}"></div>
+          <div class="field"><label for="rList">Clientes por día en cada lista</label><input type="number" id="rList" value="${REGLAS.listaDiaria}"></div>
+          <div class="field"><span class="lab">Descuentos</span><span class="note">Los vendedores solo usan ofertas de Marketing. Cualquier otro descuento lo aprueba el dueño.</span></div>
+          <button type="button" class="btn btn-g" id="rReset">Volver a los valores iniciales</button>
+        </div>
+        <div class="card"><h2 class="sec">Predicción con IA <span class="tag t-afinidad">Etapa 2</span></h2>
+          <p class="note">La "Afinidad" de hoy es la primera versión: cuenta qué categorías compran juntos los clientes. La etapa 2 suma edad, género (de Centria), ticket y época del año, y aprende de los resultados que registran los vendedores.</p>
+          <div class="warnbox"><b>Para que funcione:</b> hoy solo ${STATS.rec} clientes compraron más de una vez. Es poca historia para un modelo. Los resultados que registren los vendedores en los próximos 2 o 3 meses son el insumo principal.</div>
+        </div>
+      </div>
+    </section>`;
+  }
+  wire.reglas = (app) => {
+    const re = () => { saveReglas(); procesar(); render(); toast('Regla actualizada. Lista recalculada'); };
+    app.querySelectorAll('[data-rep]').forEach((inp) => inp.addEventListener('change', () => { REGLAS.reposicion[+inp.dataset.rep][inp.dataset.k] = Number(inp.value) || 0; re(); }));
+    $('rInact').addEventListener('change', (e) => { REGLAS.inactivo = Number(e.target.value) || 0; re(); });
+    $('rFat').addEventListener('change', (e) => { REGLAS.fatiga = Number(e.target.value) || 0; re(); });
+    $('rList').addEventListener('change', (e) => { REGLAS.listaDiaria = Math.max(5, Number(e.target.value) || 25); re(); });
+    $('rReset').onclick = () => { REGLAS = JSON.parse(JSON.stringify(DEF_REGLAS)); re(); };
+  };
+
+  // ===================== DATOS =====================
+  function vDatos() {
+    const S = STATS;
+    return `<section class="view">
+      <div class="hdr"><h2 class="sec">Calidad de los datos</h2><p class="sub">Lo que el sistema dejó afuera o marcó, para que la lista no tenga errores.</p></div>
+      <div class="kpis num">
+        <div class="kpi"><span class="k">Pedidos leídos</span><span class="v">${S.n.toLocaleString('es-PY')}</span><span class="d">${fechaCorta(S.desde)} al ${fechaCorta(S.hasta)}</span></div>
+        <div class="kpi"><span class="k">Número de pedido y variante</span><span class="v">${ORD.every((o) => o.id) ? 'Sí' : 'No'} / ${ORD.some((o) => o.prods.some((p) => p.v)) ? 'Sí' : 'No'}</span><span class="d">${ORD.every((o) => o.id) ? 'Se pueden sumar archivos diarios sin duplicar.' : 'Sin número de pedido, cada archivo reemplaza al anterior.'} ${ORD.some((o) => o.prods.some((p) => p.v)) ? 'Variantes listas para cruzar con la API.' : 'Falta la variante para traer el margen.'}</span></div>
+        <div class="kpi"><span class="k">Precio por producto</span><span class="v">${pct(ORD.filter((o) => o.prods.length === 1).length / S.n)}</span><span class="d">de los pedidos tienen un solo producto: precio exacto. En el resto se estima.</span></div>
+        <div class="kpi"><span class="k">Clientes (por teléfono)</span><span class="v">${S.clientes.toLocaleString('es-PY')}</span><span class="d">${S.empresas.length} parecen empresas</span></div>
+        <div class="kpi"><span class="k">Internos excluidos</span><span class="v">${S.internos.length}</span><span class="d">el cliente se llama igual que un vendedor</span></div>
+        <div class="kpi"><span class="k">Teléfonos dudosos</span><span class="v">${S.dudosos.length}</span><span class="d">números repetidos o incompletos</span></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h2 class="sec">Excluidos de las listas</h2>
+          <div class="scroll"><table class="t num"><thead><tr><th>Cliente</th><th>Teléfono</th><th class="r">Pedidos</th><th>Motivo</th></tr></thead><tbody>
+          ${[...S.internos.map((c) => [c, 'Interno']), ...S.dudosos.map((c) => [c, 'Teléfono dudoso'])].map(([c, m]) => `<tr><td>${esc(c.nombre)}</td><td>+${esc(c.tel)}</td><td class="r">${c.n}</td><td>${m}</td></tr>`).join('') || '<tr><td colspan="4">Ninguno</td></tr>'}
+          </tbody></table></div>
+          <p class="note">Si ves familiares o empleados que siguen en las listas, avisame y agrego una lista de exclusión editable.</p>
+        </div>
+        <div class="card"><h2 class="sec">Pedidos por canal</h2>
+          <div class="scroll"><table class="t num"><thead><tr><th>Canal</th><th class="r">Pedidos</th><th class="r">%</th></tr></thead><tbody>${Object.entries(S.porMkt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${v}</td><td class="r">${pct(v / S.n)}</td></tr>`).join('')}</tbody></table></div>
+          <h2 class="sec">Actualizar o borrar</h2>
+          <label class="upload" for="fileOrd2" style="min-height:100px">Subir el Excel del día<small>si trae número de pedido, se suma sin duplicar; si no, reemplaza el actual</small><input type="file" id="fileOrd2" accept=".xlsx,.xls,.csv"></label>
+          <button type="button" class="btn btn-bad" id="borrar">Borrar los datos de este dispositivo</button>
+        </div>
+      </div>
+    </section>`;
+  }
+  wire.datos = () => {
+    $('fileOrd2').addEventListener('change', (e) => { PREV = ORD; ORD = []; render(); const inp = $('fileOrd'); const dt = new DataTransfer(); dt.items.add(e.target.files[0]); inp.files = dt.files; inp.dispatchEvent(new Event('change')); });
+    $('borrar').onclick = () => { store.del('mr-ord'); store.del('mr-res'); ORD = []; CL = []; OPS = []; resultados = {}; $('roles').hidden = true; $('dataTag').textContent = 'Sin datos cargados'; render(); toast('Datos borrados de este dispositivo'); };
+  };
+
+  // ===================== INICIO =====================
+  try { const saved = JSON.parse(store.get('mr-ord') || 'null'); if (Array.isArray(saved) && saved.length) { ORD = saved; procesar(); } } catch (e) {}
+  render();
+})();
+</script>
