@@ -1,125 +1,115 @@
-# Cómo publicar la web de Recompras
+# Cómo publicar la web de Recompras (sin saber programar)
 
-Tiempo total: unos 40 minutos. No hace falta programar: solo crear cuentas, copiar y pegar.
+Son **5 pasos de hacer clic**, unos 20 minutos en total. No hay que escribir código ni copiar archivos.
 
-Al terminar vas a tener una web con su propia dirección. Cualquiera puede crear su usuario, pero **nadie ve datos de clientes hasta que vos, como superadmin, lo aprobás**.
-
-## Qué vas a usar
-
-| Servicio | Para qué | Costo para empezar |
-|---|---|---|
-| **Supabase** | Base de datos y usuarios | Plan gratis |
-| **Vercel** | Publicar la web | Plan gratis |
-| **Anthropic Console** | La IA (Claude Haiku 5.5) | Se paga por uso. Estimado: unos US$ 4 por mes con 5.000 consultas. Confirmá el precio vigente al cargar crédito. |
-
-Tené a mano un documento de texto para ir pegando las claves que vas copiando.
+Si en algún paso la pantalla no se parece a lo que dice acá, **sacale una captura y mandásela a Claude**. Las páginas cambian el nombre de algún botón cada tanto, y con la captura te dice dónde tocar.
 
 ---
 
-## Paso 1: base de datos (Supabase)
+## Paso 1: crear tu cuenta en Vercel (gratis)
 
-1. Entrá a **supabase.com** y creá una cuenta (podés usar tu GitHub).
-2. **New project**. Nombre: `recompras`. Elegí una contraseña fuerte para la base y guardala. Región: **South America (São Paulo)**, la más cercana a Paraguay.
-3. Esperá unos 2 minutos a que se cree.
-4. Menú izquierdo → **SQL Editor** → **New query**.
-5. Abrí el archivo `web-recompras/supabase/schema.sql` en tu GitHub, copiá **todo** el contenido y pegalo.
-6. **Antes de tocar Run**, buscá esta línea casi al principio y cambiá `TU_CORREO@ejemplo.com` por **tu correo**:
+Vercel es el servicio que publica la web en internet.
 
-   ```sql
-   insert into public.ajustes (clave, valor) values ('superadmin', 'TU_CORREO@ejemplo.com')
-   ```
+1. Entrá a **vercel.com**.
+2. Tocá **Sign Up**.
+3. Elegí **Hobby** (es el plan gratis).
+4. Escribí tu nombre y tocá **Continue with GitHub**.
+5. Si GitHub te pide permiso, tocá **Authorize**.
 
-   Ese correo va a ser el **superadmin**: el único que aprueba usuarios. Tiene que ser el mismo correo con el que después vas a crear tu usuario en la web.
-7. Tocá **Run**. Tiene que decir "Success".
-8. Menú izquierdo → **Project Settings** → **API**. Copiá a tu documento:
-   - **Project URL**: es tu `SUPABASE_URL`.
-   - **anon public**: es tu `SUPABASE_ANON_KEY`.
-   - **service_role** (tocá "Reveal"): es tu `SUPABASE_SERVICE_ROLE_KEY`. **Esta es secreta: no la mandes por WhatsApp ni la pegues en ningún otro lado.**
+✅ Listo cuando ves la pantalla principal de Vercel (dice "Overview" o "Let's build something").
 
-## Paso 2: la IA (Anthropic Console)
+## Paso 2: publicar la web
 
-1. Entrá a **console.anthropic.com** y creá una cuenta.
-2. En **Billing**, cargá un crédito chico para empezar (por ejemplo US$ 10).
-3. En **Limits**, poné un **límite de gasto mensual**, por ejemplo US$ 10. Así la IA nunca gasta más de eso aunque la usen mucho.
-4. En **API Keys**, tocá **Create Key**, ponele de nombre `recompras-web` y copiala: es tu `ANTHROPIC_API_KEY`. Se muestra una sola vez.
+1. Arriba a la derecha tocá **Add New…** y después **Project**.
+2. En la lista aparece **Mercadodigital**. Tocá **Import** al lado.
+   - Si no aparece: tocá **Adjust GitHub App Permissions**, elegí el repositorio **Mercadodigital**, tocá **Save** y volvé.
+3. Buscá **Root Directory** y tocá **Edit**. Elegí la carpeta **web-recompras** y tocá **Continue**.
+4. Tocá el botón azul **Deploy**.
+5. Esperá 1 o 2 minutos hasta que aparezca **Congratulations** con confeti.
 
-La web además limita a cada usuario a 60 consultas por hora.
+✅ La web ya está publicada, pero todavía no tiene base de datos. Eso es el paso 3.
 
-## Paso 3: publicar la web (Vercel)
+## Paso 3: crear la base de datos (gratis)
 
-1. Entrá a **vercel.com** y creá una cuenta **con tu GitHub**.
-2. **Add New → Project** → elegí el repositorio **Mercadodigital** → **Import**.
-3. Antes de publicar, configurá:
-   - **Root Directory**: tocá Edit y elegí la carpeta `web-recompras`.
-   - **Framework Preset**: `Other`.
-   - **Environment Variables**: agregá las 4 claves de tu documento, una por una, con estos nombres exactos:
-     - `SUPABASE_URL`
-     - `SUPABASE_ANON_KEY`
-     - `SUPABASE_SERVICE_ROLE_KEY`
-     - `ANTHROPIC_API_KEY`
-4. Tocá **Deploy**. En 1 o 2 minutos te da una dirección del tipo `recompras-xxxx.vercel.app`.
+1. Tocá **Continue to Dashboard** (o entrá a tu proyecto).
+2. Arriba, tocá la pestaña **Storage**.
+3. Tocá **Create Database** (o **Create**), elegí **Supabase** y tocá **Continue**.
+4. Aceptá las condiciones si te las pide.
+5. Nombre: `recompras`. Región: **São Paulo** (la más cercana a Paraguay). Plan: **Free**. Tocá **Create**.
+6. Si te pregunta a qué proyecto conectarla, elegí el de la web y tocá **Connect**.
+7. Ahora hay que volver a publicar para que la web vea la base:
+   - Arriba, pestaña **Deployments**.
+   - En la primera fila, tocá los **tres puntitos (⋯)** de la derecha y elegí **Redeploy**. Confirmá con **Redeploy**.
+   - Esperá 1 minuto.
 
-> Si el código todavía no está en la rama principal (`main`), en Vercel → Settings → Git → **Production Branch** poné `ccr-27f68a46-559fxk`. O pedime que lo pase a `main`.
+✅ Listo cuando el deployment dice **Ready**.
 
-## Paso 4: conectar el login con tu web
+## Paso 4: entrar y quedar como superadmin
 
-1. Volvé a Supabase → **Authentication** → **URL Configuration**.
-2. En **Site URL** pegá la dirección que te dio Vercel (por ejemplo `https://recompras-xxxx.vercel.app`) y guardá.
+> ⚠️ Hacé este paso apenas termines el 3. **La primera persona que se registra queda como superadmin.**
 
-Sin este paso, los correos de confirmación y de "olvidé mi clave" mandan a una dirección equivocada.
+1. En Vercel, tocá **Visit** (o la dirección que termina en `.vercel.app`).
+2. La primera vez dice "Preparando el sistema por primera vez…": esperá unos segundos.
+3. Aparece **"Bienvenido: creá tu usuario de superadmin"**. Escribí tu nombre, tu correo y una clave (mínimo 8 letras o números). Tocá **Crear mi usuario de superadmin**.
+4. Entrás directo. Arriba a la derecha dice **Superadmin**.
 
-## Paso 5: entrar como superadmin
+👉 **Guardá la dirección de la web** en tus favoritos y pasásela a tu equipo.
 
-1. Abrí tu web y tocá **No tengo usuario: crear uno**. Usá **el mismo correo** que pusiste en el Paso 1.
-2. Confirmá el correo que te llega y entrá. Arriba a la derecha vas a ver la etiqueta **Superadmin** y la pestaña **Usuarios**.
-
-Si entrás y dice "esperando aprobación", el correo no coincidió con el del Paso 1. Arreglalo en Supabase → **SQL Editor** → **New query** (cambiando el correo por el tuyo) → **Run**, y después recargá la web:
-
-```sql
-update public.perfiles set rol = 'superadmin' where email = 'TU_CORREO@ejemplo.com';
-```
-
-## Paso 6: cargar los pedidos
+## Paso 5: cargar los pedidos
 
 1. En la web, pestaña **Cargar pedidos**.
-2. Subí el Excel de pedidos (por ejemplo `orders_1.xlsx`).
-3. Listo: Resumen, Ofrecer ahora y Clientes se completan solos.
+2. Tocá **Subir Excel de pedidos** y elegí tu archivo (por ejemplo `orders_1.xlsx`).
+3. En unos segundos se completan Resumen, Ofrecer ahora y Clientes.
 
-Cada vez que tengas pedidos nuevos, subí el Excel actualizado. Si el Excel trae número de pedido, se suma sin duplicar. Si no lo trae, reemplaza todo lo anterior.
+Cuando tengas pedidos nuevos, repetí este paso con el Excel actualizado.
 
-## Paso 7 (opcional): tu propio dominio
+---
+
+## Opcional: activar la IA (unos US$ 4 por mes, estimado)
+
+El sistema funciona sin IA. Si querés los botones de recomendación con Claude:
+
+1. Entrá a **console.anthropic.com** y creá una cuenta.
+2. **Billing** → cargá US$ 10 con tarjeta.
+3. **Limits** → poné un límite mensual de US$ 10. Así nunca gasta más que eso.
+4. **API Keys** → **Create Key** → nombre `recompras` → **copiá la clave** (se muestra una sola vez).
+5. Volvé a Vercel → tu proyecto → **Settings** → **Environment Variables**.
+6. En **Key** escribí exactamente `ANTHROPIC_API_KEY`. En **Value** pegá la clave. Tocá **Save**.
+7. Pestaña **Deployments** → ⋯ en la primera fila → **Redeploy**.
+
+✅ En la ficha de un cliente aparece el botón violeta **Recomendar con IA**.
+
+## Opcional: tu propio dominio
 
 Para que la dirección sea, por ejemplo, `recompras.mercadodigital.com.py`:
 
-1. Vercel → tu proyecto → **Settings** → **Domains** → escribí `recompras.mercadodigital.com.py` → **Add**.
-2. Vercel te muestra un registro **CNAME**. Mandáselo a quien administra el dominio de Mercado Digital para que lo agregue. Tarda de minutos a unas horas.
-3. Volvé a Supabase → Authentication → URL Configuration y cambiá el **Site URL** por la dirección nueva.
+1. Vercel → tu proyecto → **Settings** → **Domains** → escribí la dirección → **Add**.
+2. Vercel muestra un dato que empieza con **CNAME**. Mandáselo a quien maneja el dominio de Mercado Digital para que lo cargue.
+
+---
 
 ## Cómo entra tu equipo
 
 1. Les pasás la dirección de la web.
-2. Cada uno toca **Crear usuario** y confirma su correo. Queda **pendiente**: no ve nada.
-3. Vos entrás a la pestaña **Usuarios**. Arriba aparece **"Por aprobar"** con cada persona nueva. Elegís el nivel (*Usuario* o *Administrador*) y tocás **Aprobar**, o **Rechazar**.
-4. La persona toca "Ya me aprobaron, entrar" y ya ve los datos.
-
-Cuando hay gente esperando, la pestaña muestra **"Usuarios · N por aprobar"**. Se actualiza sola cada minuto.
+2. Cada uno toca **No tengo usuario: crear uno**, pone su correo y una clave. Queda **esperando aprobación** y no ve nada.
+3. Vos vas a la pestaña **Usuarios**: aparece en **Por aprobar**. Elegís *Usuario* o *Administrador* y tocás **Aprobar**.
+4. Le avisás y toca **Ya me aprobaron, entrar**.
 
 | Nivel | Qué puede hacer |
 |---|---|
-| Pendiente | Nada. No ve ningún dato. |
-| Rechazado | Nada. Si cambiás de idea, lo aprobás desde "Sin acceso". |
 | Usuario | Ve clientes y listas, usa la IA y marca clientes como ofrecidos. |
-| Administrador | Todo lo anterior, más cargar pedidos y cambiar los ciclos. **No puede aprobar personas.** |
-| Superadmin (vos) | Todo, y es el único que aprueba, rechaza o cambia el nivel de los demás. Hay uno solo. |
+| Administrador | Lo anterior, más cargar pedidos y cambiar ciclos. No aprueba gente. |
+| Superadmin (vos) | Todo. Es el único que aprueba, rechaza, cambia niveles y genera claves. |
 
-Para sacarle el acceso a alguien (por ejemplo, si deja la empresa): **Usuarios → Con acceso → Quitar acceso**. Deja de ver datos al instante.
+**Si alguien se olvida la clave:** Usuarios → **Nueva clave** al lado de su nombre. La web te muestra una clave nueva; se la pasás por WhatsApp.
+
+**Si alguien deja la empresa:** Usuarios → **Quitar acceso**. Deja de ver datos al instante.
 
 ## Si algo falla
 
-| Problema | Solución |
+| Lo que ves | Qué hacer |
 |---|---|
-| La web dice "Falta configurar el sistema" | Revisá en Vercel que las 4 variables estén con el nombre exacto, y volvé a publicar (Deployments → Redeploy). |
-| No llega el correo de confirmación | El plan gratis de Supabase manda pocos correos por hora. Esperá un rato, o desactivá la confirmación en Authentication → Providers → Email → **Confirm email**. Los datos siguen protegidos porque igual tenés que aprobar a cada usuario. |
-| El botón de IA da error de clave | Revisá `ANTHROPIC_API_KEY` en Vercel y que haya crédito en la consola de Anthropic. |
-| Un usuario aprobado no ve datos | Que toque "Ya me aprobaron, entrar", o que cierre sesión (botón **Salir**) y vuelva a entrar. |
-| Perdiste el acceso a tu correo de superadmin | Supabase → SQL Editor: `update public.perfiles set rol = 'superadmin' where email = 'CORREO_NUEVO';` (antes de crear el nuevo, bajá el anterior con `update public.perfiles set rol = 'usuario' where rol = 'superadmin';`). |
+| "Falta conectar la base de datos" | Repetí el **Paso 3**, sin olvidarte del **Redeploy** del final. |
+| "No se pudo preparar la base de datos" | Mandale una captura a Claude. |
+| Al registrarte dice "esperando aprobación" y no sos superadmin | Alguien se registró antes que vos. Mandale una captura a Claude y te dice cómo corregirlo. |
+| El botón de IA da error | Revisá que `ANTHROPIC_API_KEY` esté bien escrita en Vercel, que haya saldo en Anthropic y que hayas hecho **Redeploy**. |

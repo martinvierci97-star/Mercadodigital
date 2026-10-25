@@ -1,12 +1,14 @@
-// Datos públicos que necesita el navegador para conectarse a Supabase.
+// Lo que el navegador necesita para arrancar: datos públicos de Supabase y el estado de la instalación.
 // La "anon key" es pública por diseño: la seguridad está en las reglas de la base.
-export default function handler(req, res) {
-  const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    res.status(500).json({ error: 'Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en Vercel.' });
+import { SUPABASE_URL, SUPABASE_ANON, configurado, supabaseAdmin } from './_comun.js';
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  if (!configurado()) {
+    res.status(200).json({ paso: 'base', error: 'Falta conectar la base de datos (Supabase) en Vercel.' });
     return;
   }
-  res.setHeader('Cache-Control', 'public, max-age=300');
-  res.status(200).json({ url, anonKey, ia: Boolean(process.env.ANTHROPIC_API_KEY) });
+  const { count, error } = await supabaseAdmin().from('perfiles').select('id', { count: 'exact', head: true });
+  if (error) { res.status(200).json({ paso: 'instalar', url: SUPABASE_URL, anonKey: SUPABASE_ANON }); return; }
+  res.status(200).json({ paso: 'listo', url: SUPABASE_URL, anonKey: SUPABASE_ANON, ia: Boolean(process.env.ANTHROPIC_API_KEY), hayUsuarios: (count || 0) > 0 });
 }

@@ -2,10 +2,13 @@
   "name": "recompras-mercado-digital",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
     "@supabase/supabase-js": "2.117.3",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "pg": "8.23.1"
   }
 }

@@ -830,7 +830,7 @@ tr.click:hover td { background: var(--surface-2); }
   // ============================================================
   // Login y usuarios
   // ============================================================
-  let authModo = 'entrar', authMsg = null, USUARIOS = [];
+  let authModo = 'entrar', authMsg = null, USUARIOS = [], primerUsuario = false, claveNueva = null;
   function vAuth() {
     if (recuperando) return `<section class="view auth"><form class="card" id="fAuth"><h2 class="sec">Elegí una clave nueva</h2>
       <div class="field"><label for="aPass">Clave nueva</label><input type="password" id="aPass" autocomplete="new-password" minlength="8" required class="in" style="min-height:44px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px"></div>
@@ -842,15 +842,18 @@ tr.click:hover td { background: var(--surface-2); }
       <p class="note">El usuario <b>${esc(perfil.email)}</b> no tiene acceso al sistema. Si creés que es un error, hablá con el superadmin de Mercado Digital.</p></div></section>`;
     const crear = authModo === 'crear', olvido = authModo === 'olvido';
     const inp = (id, label, type, ac) => `<div class="field"><label for="${id}">${label}</label><input type="${type}" id="${id}" autocomplete="${ac}" required class="in" style="min-height:44px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)"></div>`;
+    if (olvido) return `<section class="view auth"><div class="card"><h2 class="sec">¿Te olvidaste la clave?</h2>
+      <p class="note">Pedile al superadmin de Mercado Digital que te genere una clave nueva desde la pestaña Usuarios. Te la pasa y entrás con ella.</p>
+      <button type="button" class="lnk" data-modo="entrar">Volver a entrar</button></div></section>`;
     return `<section class="view auth"><form class="card" id="fAuth" novalidate>
-      <h2 class="sec">${crear ? 'Crear usuario' : olvido ? 'Recuperar clave' : 'Entrar'}</h2>
-      <p class="note">${crear ? 'Después de crearlo, el superadmin te tiene que aprobar para ver los datos.' : olvido ? 'Te mandamos un correo con un link para elegir una clave nueva.' : 'Sistema de recompras de Mercado Digital.'}</p>
+      <h2 class="sec">${primerUsuario ? 'Bienvenido: creá tu usuario de superadmin' : crear ? 'Crear usuario' : 'Entrar'}</h2>
+      <p class="note">${primerUsuario ? 'Sos la primera persona en entrar, así que vas a ser el <b>superadmin</b>: el único que aprueba a los demás. Usá tu correo y una clave que recuerdes.' : crear ? 'Después de crearlo, el superadmin te tiene que aprobar para ver los datos.' : 'Sistema de recompras de Mercado Digital.'}</p>
       ${crear ? inp('aNombre', 'Tu nombre', 'text', 'name') : ''}
       ${inp('aEmail', 'Correo', 'email', 'email')}
       ${olvido ? '' : inp('aPass', 'Clave' + (crear ? ' (mínimo 8 caracteres)' : ''), 'password', crear ? 'new-password' : 'current-password')}
-      <button type="submit" class="btn btn-p" id="aBtn">${crear ? 'Crear usuario' : olvido ? 'Enviar correo' : 'Entrar'}</button>
+      <button type="submit" class="btn btn-p" id="aBtn">${primerUsuario ? 'Crear mi usuario de superadmin' : crear ? 'Crear usuario' : 'Entrar'}</button>
       ${authMsg ? `<p class="note" style="color:${authMsg.ok ? 'var(--ok)' : 'var(--bad)'};font-weight:600">${esc(authMsg.txt)}</p>` : ''}
-      <div style="display:grid;gap:2px">${crear || olvido ? '<button type="button" class="lnk" data-modo="entrar">Ya tengo usuario: entrar</button>' : '<button type="button" class="lnk" data-modo="crear">No tengo usuario: crear uno</button><button type="button" class="lnk" data-modo="olvido">Me olvidé la clave</button>'}</div>
+      <div style="display:grid;gap:2px" ${primerUsuario ? 'hidden' : ''}>${crear || olvido ? '<button type="button" class="lnk" data-modo="entrar">Ya tengo usuario: entrar</button>' : '<button type="button" class="lnk" data-modo="crear">No tengo usuario: crear uno</button><button type="button" class="lnk" data-modo="olvido">Me olvidé la clave</button>'}</div>
     </form></section>`;
   }
   function wireAuth() {
@@ -864,11 +867,11 @@ tr.click:hover td { background: var(--surface-2); }
       if (recuperando) { r = await sb.auth.updateUser({ password: pass }); if (!r.error) { recuperando = false; authMsg = null; await alEntrar(); return; } }
       else if (authModo === 'crear') {
         if (pass.length < 8) { authMsg = { ok: false, txt: 'La clave tiene que tener al menos 8 caracteres.' }; render(); return; }
-        r = await sb.auth.signUp({ email, password: pass, options: { data: { nombre: $('aNombre').value.trim() }, emailRedirectTo: location.origin } });
-        if (!r.error && !r.data.session) { authMsg = { ok: true, txt: 'Listo. Revisá tu correo y confirmá la cuenta; después entrá con tu clave.' }; authModo = 'entrar'; render(); return; }
-      } else if (authModo === 'olvido') {
-        r = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
-        if (!r.error) { authMsg = { ok: true, txt: 'Te mandamos el correo. Abrí el link desde este mismo dispositivo.' }; authModo = 'entrar'; render(); return; }
+        const rr = await fetch('/api/registro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass, nombre: $('aNombre').value.trim() }) });
+        const jj = await rr.json().catch(() => ({}));
+        if (!rr.ok) { authMsg = { ok: false, txt: jj.error || 'No se pudo crear el usuario.' }; render(); return; }
+        primerUsuario = false;
+        r = await sb.auth.signInWithPassword({ email, password: pass });
       } else r = await sb.auth.signInWithPassword({ email, password: pass });
       if (r.error) { authMsg = { ok: false, txt: /invalid login/i.test(r.error.message) ? 'Correo o clave incorrectos.' : /confirm/i.test(r.error.message) ? 'Todavía no confirmaste tu correo.' : r.error.message }; render(); return; }
       authMsg = null;
@@ -881,6 +884,7 @@ tr.click:hover td { background: var(--surface-2); }
     const nom = (u) => `<b>${esc(u.nombre || '—')}</b><br><span class="note">${esc(u.email)}</span>`;
     return `<section class="view">
     <div class="hdr"><h2 class="sec">Usuarios</h2><p class="sub">Cualquiera puede crear su usuario con el link de la web. Nadie ve datos hasta que vos lo aprobás. Solo vos, como superadmin, ves esta pantalla.</p></div>
+    ${claveNueva ? `<div class="okbox"><b>Clave nueva para ${esc(claveNueva.email)}:</b> <span class="num" style="font-size:18px;font-weight:800;user-select:all">${esc(claveNueva.clave)}</span><br>Pasásela por WhatsApp. Puede entrar con esa clave desde ahora. <button type="button" class="btn btn-g" id="copiarClave" style="min-height:32px;padding:4px 10px">Copiar</button></div>` : ''}
     <div class="card"><h2 class="sec">Por aprobar · ${pend.length}</h2>
       ${pend.length ? `<div class="scroll"><table class="t"><thead><tr><th>Persona</th><th>Pidió acceso</th><th>Darle acceso como</th><th></th></tr></thead><tbody>
         ${pend.map((u) => `<tr><td class="w">${nom(u)}</td><td class="num">${fecha(u.creado)}</td>
@@ -892,7 +896,7 @@ tr.click:hover td { background: var(--surface-2); }
     <div class="card"><h2 class="sec">Con acceso · ${act.length}</h2><div class="scroll"><table class="t"><thead><tr><th>Persona</th><th>Aprobado</th><th>Nivel</th><th></th></tr></thead><tbody>
       ${act.map((u) => `<tr><td class="w">${nom(u)}${u.id === perfil.id ? ' <span class="tag">vos</span>' : ''}</td><td class="num">${u.aprobado_en ? fecha(u.aprobado_en) : '—'}</td>
         <td>${u.rol === 'superadmin' ? '<span class="tag t-complemento">Superadmin</span>' : `<select class="in" data-rol="${esc(u.id)}" aria-label="Nivel de ${esc(u.email)}"><option value="usuario" ${u.rol === 'usuario' ? 'selected' : ''}>Usuario</option><option value="admin" ${u.rol === 'admin' ? 'selected' : ''}>Administrador</option></select>`}</td>
-        <td>${u.rol === 'superadmin' ? '' : `<button type="button" class="btn btn-bad" data-rechazar="${esc(u.id)}" style="min-height:36px">Quitar acceso</button>`}</td></tr>`).join('')}
+        <td>${u.rol === 'superadmin' ? '' : `<div class="btns"><button type="button" class="btn btn-g" data-clave="${esc(u.id)}" style="min-height:36px">Nueva clave</button><button type="button" class="btn btn-bad" data-rechazar="${esc(u.id)}" style="min-height:36px">Quitar acceso</button></div>`}</td></tr>`).join('')}
     </tbody></table></div>
     <p class="note"><b>Usuario:</b> ve clientes y listas, usa la IA y marca ofrecidos. <b>Administrador:</b> además carga pedidos y cambia ciclos. Solo el superadmin aprueba personas.</p></div>
     ${rech.length ? `<div class="card"><h2 class="sec">Sin acceso · ${rech.length}</h2>${rech.map((u) => `<div class="cat-row"><span>${nom(u)}</span><span></span><button type="button" class="btn btn-g" data-aprobar="${esc(u.id)}" style="min-height:36px">Darle acceso</button></div>`).join('')}</div>` : ''}
@@ -908,6 +912,15 @@ tr.click:hover td { background: var(--surface-2); }
     document.querySelectorAll('[data-rechazar]').forEach((b) => b.onclick = () => cambiar(b.dataset.rechazar, 'rechazado', 'Acceso quitado'));
     document.querySelectorAll('[data-rol]').forEach((x) => x.onchange = () => cambiar(x.dataset.rol, x.value, 'Nivel actualizado'));
     $('uRefrescar').onclick = async () => { await cargarUsuarios(); render(); };
+    document.querySelectorAll('[data-clave]').forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      const { data: { session } } = await sb.auth.getSession();
+      const r = await fetch('/api/clave', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session?.access_token || '') }, body: JSON.stringify({ id: b.dataset.clave }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || 'No se pudo cambiar la clave.'); b.disabled = false; return; }
+      claveNueva = { email: USUARIOS.find((u) => u.id === b.dataset.clave)?.email || '', clave: j.clave }; render(); window.scrollTo(0, 0);
+    });
+    if ($('copiarClave')) $('copiarClave').onclick = () => navigator.clipboard.writeText(claveNueva.clave).then(() => toast('Clave copiada'), () => toast('Seleccioná la clave y copiala'));
   };
 
   // ============================================================
@@ -966,10 +979,23 @@ tr.click:hover td { background: var(--surface-2); }
   // ============================================================
   let sucio = true;
   async function boot() {
-    let cfg;
-    try { cfg = await (await fetch('/api/config')).json(); } catch (e) { cfg = {}; }
-    if (!cfg.url || !window.supabase) { $('app').innerHTML = `<section class="view auth"><div class="card"><h2 class="sec">Falta configurar el sistema</h2><p class="note">${esc(cfg.error || 'No se pudo conectar con la base de datos.')}</p></div></section>`; $('dataTag').textContent = 'Sin conexión'; return; }
+    const aviso = (t, d) => { $('app').innerHTML = `<section class="view auth"><div class="card"><h2 class="sec">${t}</h2><p class="note">${d}</p></div></section>`; };
+    const leerCfg = async () => { try { return await (await fetch('/api/config')).json(); } catch (e) { return {}; } };
+    let cfg = await leerCfg();
+    if (cfg.paso === 'instalar') {
+      $('dataTag').textContent = 'Instalando…';
+      aviso('Preparando el sistema por primera vez…', 'Estamos creando la base de datos. Tarda unos segundos. No cierres esta página.');
+      const r = await fetch('/api/instalar', { method: 'POST' }); const j = await r.json().catch(() => ({}));
+      if (!r.ok) { aviso('No se pudo preparar la base de datos', esc(j.error || 'Error desconocido') + '<br><br>Mandale una captura de esta pantalla a quien te ayuda con la web.'); return; }
+      await new Promise((ok) => setTimeout(ok, 2000)); cfg = await leerCfg();
+    }
+    if (cfg.paso !== 'listo' || !window.supabase) {
+      $('dataTag').textContent = 'Falta un paso';
+      aviso('Falta conectar la base de datos', `${esc(cfg.error || 'No se pudo conectar con la base de datos.')}<br><br>Seguí el <b>Paso 3</b> de la guía: en Vercel, pestaña <b>Storage</b>, crear la base de Supabase y conectarla a este proyecto.`);
+      return;
+    }
     iaOn = Boolean(cfg.ia);
+    if (!cfg.hayUsuarios) { primerUsuario = true; authModo = 'crear'; }
     sb = window.supabase.createClient(cfg.url, cfg.anonKey);
     const _render = render; render = function () { if (sucio && Object.keys(CHUNKS).length) { sucio = false; analizar(); } _render(); };
     $('btnSalir').onclick = async () => { await sb.auth.signOut(); location.reload(); };

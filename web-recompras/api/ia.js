@@ -3,14 +3,13 @@
 // para que la página no pueda usarse como un chat general.
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { supabaseAdmin, quienPide, leerCuerpo } from './_comun.js';
 
 const MODELO = 'claude-haiku-5-5';
 const LIMITE_POR_HORA = 60;
 
 const anthropic = new Anthropic();
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 const Recomendacion = z.object({
   recomendaciones: z.array(z.object({ producto: z.string(), cuando: z.string(), por_que: z.string() })),
@@ -66,20 +65,20 @@ function armarPedido(tipo, d) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Método no permitido' }); return; }
 
+  if (!process.env.ANTHROPIC_API_KEY) { res.status(503).json({ error: 'La IA todavía no está configurada (falta la clave de Anthropic en Vercel).' }); return; }
   // 1. ¿Quién pide? Tiene que ser un usuario aprobado
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const { data: u, error: eu } = await supabase.auth.getUser(token);
-  if (eu || !u?.user) { res.status(401).json({ error: 'Iniciá sesión de nuevo.' }); return; }
-  const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', u.user.id).single();
-  if (!perfil || !['usuario', 'admin', 'superadmin'].includes(perfil.rol)) { res.status(403).json({ error: 'Tu usuario todavía no está aprobado.' }); return; }
+  const perfil = await quienPide(req);
+  if (!perfil) { res.status(401).json({ error: 'Iniciá sesión de nuevo.' }); return; }
+  if (!['usuario', 'admin', 'superadmin'].includes(perfil.rol)) { res.status(403).json({ error: 'Tu usuario todavía no está aprobado.' }); return; }
+  const supabase = supabaseAdmin();
 
   // 2. Límite de uso para cuidar el costo
   const haceUnaHora = new Date(Date.now() - 3600e3).toISOString();
-  const { count } = await supabase.from('consultas_ia').select('id', { count: 'exact', head: true }).eq('usuario', u.user.id).gte('creado', haceUnaHora);
+  const { count } = await supabase.from('consultas_ia').select('id', { count: 'exact', head: true }).eq('usuario', perfil.id).gte('creado', haceUnaHora);
   if ((count || 0) >= LIMITE_POR_HORA) { res.status(429).json({ error: `Llegaste a ${LIMITE_POR_HORA} consultas en la última hora. Probá más tarde.` }); return; }
 
   // 3. Pedido a Claude
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const body = leerCuerpo(req);
   const p = armarPedido(body.tipo, body.datos || {});
   if (!p) { res.status(400).json({ error: 'Consulta no válida.' }); return; }
 
@@ -91,7 +90,7 @@ export default async function handler(req, res) {
       output_config: { effort: 'low', format: zodOutputFormat(p.schema) },
       messages: [{ role: 'user', content: p.texto }],
     });
-    await supabase.from('consultas_ia').insert({ usuario: u.user.id, tipo: body.tipo, tokens_in: r.usage?.input_tokens, tokens_out: r.usage?.output_tokens });
+    await supabase.from('consultas_ia').insert({ usuario: perfil.id, tipo: body.tipo, tokens_in: r.usage?.input_tokens, tokens_out: r.usage?.output_tokens });
     if (r.stop_reason === 'refusal') { res.status(422).json({ error: 'La IA no pudo responder esta consulta.' }); return; }
     if (!r.parsed_output) { res.status(502).json({ error: 'La IA respondió en un formato inesperado. Probá de nuevo.' }); return; }
     res.status(200).json(r.parsed_output);

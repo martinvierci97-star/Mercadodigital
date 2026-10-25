@@ -1,14 +1,8 @@
 -- ============================================================
 -- Recompras Mercado Digital: base de datos
--- Pegar completo en Supabase > SQL Editor > New query > Run
+-- La web la instala sola la primera vez que se abre (api/instalar.js).
+-- Si cambiás este archivo, regenerá api/_schema.js con: node scripts/generar-schema.mjs
 -- ============================================================
-
--- >>> ANTES DE CORRERLO: poné tu correo en la línea de abajo. <<<
--- Ese correo queda como SUPERADMIN: el único que aprueba usuarios.
-create table if not exists public.ajustes (clave text primary key, valor text not null);
-insert into public.ajustes (clave, valor) values ('superadmin', 'TU_CORREO@ejemplo.com')
-  on conflict (clave) do update set valor = excluded.valor;
-alter table public.ajustes enable row level security;  -- nadie la lee desde la web
 
 -- Perfiles: cada persona que crea su usuario queda "pendiente"
 -- hasta que un administrador la aprueba.
@@ -32,11 +26,10 @@ create unique index if not exists un_solo_superadmin on public.perfiles (rol) wh
 create or replace function public.nuevo_usuario()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  -- El correo configurado arriba entra directo como superadmin; el resto queda pendiente
+  -- La primera persona que se registra es el superadmin; el resto queda pendiente
   insert into public.perfiles (id, email, nombre, rol)
   values (new.id, new.email, coalesce(new.raw_user_meta_data ->> 'nombre', ''),
-          case when lower(new.email) = (select lower(valor) from public.ajustes where clave = 'superadmin')
-                and not exists (select 1 from public.perfiles where rol = 'superadmin')
+          case when not exists (select 1 from public.perfiles where rol = 'superadmin')
                then 'superadmin' else 'pendiente' end);
   return new;
 end $$;
@@ -145,3 +138,6 @@ create policy ofrecidos_usar on public.ofrecidos for all using (public.es_usuari
 drop policy if exists consultas_ver on public.consultas_ia;
 create policy consultas_ver on public.consultas_ia for select using (public.es_admin());
 -- Las consultas las registra el servidor con la clave de servicio; los usuarios no escriben acá.
+
+-- Que la API de Supabase vea las tablas nuevas enseguida
+notify pgrst, 'reload schema';
