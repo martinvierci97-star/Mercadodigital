@@ -7,8 +7,8 @@
 <title>Recompras Mercado Digital</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Albert+Sans:wght@400;500;600;700&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <style>
 /* Layout: barra de rol arriba, contenido en una columna en celular y dos en escritorio; ficha del cliente como panel inferior */
 :root {
@@ -254,7 +254,8 @@ tr.click:hover td { background: var(--surface-2); }
   const pct = (n) => (isFinite(n) ? (Math.round(n * 1000) / 10).toLocaleString('es-PY') : '0') + '%';
   const nf = (n) => Math.round(n || 0).toLocaleString('es-PY');
   const DAY = 864e5;
-  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const _NC = new Map();
+  const norm = (s) => { s = String(s || ''); let r = _NC.get(s); if (r === undefined) { r = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); if (_NC.size > 300000) _NC.clear(); _NC.set(s, r); } return r; };
   const cortar = (s, n = 60) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).trim() + '…' : s; };
   const fecha = (t) => new Date(t).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const fechaC = (t) => new Date(t).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
@@ -348,8 +349,11 @@ tr.click:hover td { background: var(--surface-2); }
   // ============================================================
   // Análisis
   // ============================================================
-  const cicloDe = (cat) => CICLOS.find((c) => norm(cat).includes(norm(c.match)));
+  let _CIC = new Map();
+  const cicloDe = (cat) => { let r = _CIC.get(cat); if (r === undefined) { const n = norm(cat); r = CICLOS.find((c) => n.includes(norm(c.match))) || null; _CIC.set(cat, r); } return r || undefined; };
+  let PCAT = {};
   function analizar() {
+    const t0 = performance.now(); _CIC = new Map();
     const raw = Object.keys(CHUNKS).sort((a, b) => +a.slice(1) - +b.slice(1)).flatMap((k) => CHUNKS[k]);
     ORD = raw.map((o) => ({ id: o.i, f: o.f, cli: o.c, tel: o.t, vend: o.v, cat: o.k, marca: o.m, total: o.$, mkt: o.x, prods: (o.p || []).map(([q, n, v]) => ({ q, n, v })) })).sort((a, b) => a.f - b.f);
     if (!ORD.length) { S = null; return; }
@@ -370,6 +374,10 @@ tr.click:hover td { background: var(--surface-2); }
     PROD = {};
     ORD.forEach((o) => { const emp = EMPRESA.test(o.cli); o.prods.forEach((p) => { const k = norm(p.n); const x = (PROD[k] ||= { n: p.n, cat: p.cat, marca: p.marca, uds: 0, ped: 0, precios: [], clientes: new Set() }); x.uds += p.q; x.ped++; if (!emp && p.q <= 3) x.precios.push(p.pu); x.clientes.add(o.tel); }); });
     Object.values(PROD).forEach((x) => { x.precio = med(x.precios) || 0; });
+    // Índice: productos con precio por categoría, ordenados por cantidad de clientes (evita recorrer todo el catálogo por cliente)
+    PCAT = {};
+    for (const [k, x] of Object.entries(PROD)) { x.k = k; if (x.precio) (PCAT[norm(x.cat)] ||= []).push(x); }
+    Object.values(PCAT).forEach((a) => a.sort((a1, b1) => b1.clientes.size - a1.clientes.size));
 
     // Clientes
     const by = new Map();
@@ -411,7 +419,8 @@ tr.click:hover td { background: var(--surface-2); }
       }
     });
     ORD.forEach((o) => { if (cm[o.cat]) { cm[o.cat].ventas += o.total; cm[o.cat].pedidos++; } });
-    CAT = Object.values(cm).map((x) => ({ ...x, real: med(x.gaps), ciclo: cicloDe(x.cat), aOfrecer: base.filter((c) => !c.empresa && c.prox && c.prox.cat === x.cat && ((c.prox.estado === 'venc' && c.prox.atraso <= 60) || c.prox.estado === 'sem')).length })).sort((a, b) => b.ventas - a.ventas);
+    const ofCnt = {}; base.forEach((c) => { if (!c.empresa && c.prox && ((c.prox.estado === 'venc' && c.prox.atraso <= 60) || c.prox.estado === 'sem')) ofCnt[c.prox.cat] = (ofCnt[c.prox.cat] || 0) + 1; });
+    CAT = Object.values(cm).map((x) => ({ ...x, real: med(x.gaps), ciclo: cicloDe(x.cat), aOfrecer: ofCnt[x.cat] || 0 })).sort((a, b) => b.ventas - a.ventas);
 
     // Indicadores
     const tot = ORD.reduce((s, o) => s + o.total, 0);
@@ -425,6 +434,7 @@ tr.click:hover td { background: var(--surface-2); }
       porRec: Object.fromEntries(RECENCIA.map((r) => [r.k, pers.filter((c) => c.rec === r.k)])),
       conIds: ORD.every((o) => o.id), conVar: ORD.some((o) => o.prods.some((p) => p.v)) };
     $('dataTag').textContent = `${nf(S.n)} pedidos · ${fecha(S.desde)} al ${fecha(S.hasta)}`;
+    console.info('[recompras] análisis en', Math.round(performance.now() - t0), 'ms');
   }
 
   // Qué ofrecerle a cada cliente y cuándo
@@ -457,16 +467,16 @@ tr.click:hover td { background: var(--surface-2); }
     // 3) Venta cruzada por lo que compran clientes parecidos
     const lc = norm(lo.cat); const co = CO.cat[lc];
     if (co) {
-      const best = Object.entries(co).filter(([b, n]) => n >= 2 && !c.cats.map(norm).includes(b)).sort((a, b) => b[1] - a[1])[0];
+      const ya = new Set(c.cats.map(norm)); const best = Object.entries(co).filter(([b, n]) => n >= 2 && !ya.has(b)).sort((a, b) => b[1] - a[1])[0];
       if (best) { const p = mejorDeCat(best[0], c); if (p) return { tipo: 'cruzada', cat: p.cat, due: null, estado: 'abierta', prod: p.n, precio: p.precio, alt: null, why: `${best[1]} clientes que compraron ${lo.cat.toLowerCase()} también compraron ${p.cat.toLowerCase()}.` }; }
     }
     return null;
   }
   function estadoDe(due) { const d = (due - hoy) / DAY; return d < 0 ? 'venc' : d <= 7 ? 'sem' : d <= 30 ? 'prox' : 'fut'; }
   function mejorDeCat(cat, c) {
-    const k = norm(cat);
-    const ps = Object.values(PROD).filter((p) => norm(p.cat) === k && p.precio && !c.prods.has(norm(p.n))).sort((a, b) => b.clientes.size - a.clientes.size);
-    return ps[0] || null;
+    const ps = PCAT[norm(cat)]; if (!ps) return null;
+    for (const p of ps) if (!c.prods.has(p.k)) return p;
+    return null;
   }
   function alternativa(pk, cat, c) {
     const co = pk && CO.prod[pk];
@@ -777,6 +787,11 @@ tr.click:hover td { background: var(--surface-2); }
 
   // ---------- Cargar pedidos ----------
   let upMsg = null;
+  // El lector de Excel (~900 KB) se descarga solo cuando se va a subir un archivo
+  function cargarXLSX() {
+    if (window.XLSX) return Promise.resolve();
+    return (cargarXLSX.p ||= new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => { cargarXLSX.p = null; s.remove(); ko(new Error('No cargó el lector de Excel. Revisá la conexión y probá de nuevo.')); }; document.head.appendChild(s); }));
+  }
   V.cargar = () => `<section class="view">
     <div class="hdr"><h2 class="sec">Cargar pedidos</h2><p class="sub">Subí el Excel del admin. Si trae número de pedido, se suma a lo que ya está sin duplicar. Los cancelados y devueltos se sacan solos.</p></div>
     <label class="upload big" for="fileOrd">Subir Excel de pedidos<small>${S ? nf(S.n) + ' pedidos cargados, del ' + fecha(S.desde) + ' al ' + fecha(S.hasta) : 'Todavía no hay pedidos'}</small><input type="file" id="fileOrd" accept=".xlsx,.xls,.csv"></label>
@@ -788,10 +803,11 @@ tr.click:hover td { background: var(--surface-2); }
     </div>` : ''}
   </section>`;
   W.cargar = () => {
+    cargarXLSX().catch(() => {});
     $('fileOrd').onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return; const msg = $('upMsg'); msg.hidden = false; msg.style.color = ''; msg.textContent = 'Leyendo ' + f.name + '…';
       try {
-        if (typeof XLSX === 'undefined') throw new Error('No cargó el lector de Excel. Recargá la página.');
+        await cargarXLSX();
         const buf = await f.arrayBuffer();
         const wb = /\.csv$/i.test(f.name) ? XLSX.read(new TextDecoder('utf-8').decode(buf), { type: 'string' }) : XLSX.read(buf, { type: 'array' });
         const { pedidos, anulados } = leerExcel(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }));
@@ -857,7 +873,7 @@ tr.click:hover td { background: var(--surface-2); }
     </form></section>`;
   }
   function wireAuth() {
-    if ($('aRecargar')) { $('aRecargar').onclick = () => alEntrar(); return; }
+    if ($('aRecargar')) { $('aRecargar').onclick = () => alEntrar(true); return; }
     if (!$('fAuth')) return;
     document.querySelectorAll('[data-modo]').forEach((b) => b.onclick = () => { authModo = b.dataset.modo; authMsg = null; render(); });
     $('fAuth').onsubmit = async (e) => {
@@ -934,11 +950,22 @@ tr.click:hover td { background: var(--surface-2); }
     return j;
   }
   async function cargarPedidos() {
-    const filas = []; const P = 1000;
-    for (let i = 0; ; i += P) {
-      const { data, error } = await sb.from('pedidos').select('num_pedido,fecha,cliente,telefono,vendedor,categoria,marca,productos,total,canal').order('id').range(i, i + P - 1);
-      if (error) { toast('No se pudieron leer los pedidos.'); break; }
-      filas.push(...data); if (data.length < P) break;
+    const COLS_P = 'num_pedido,fecha,cliente,telefono,vendedor,categoria,marca,productos,total,canal'; const P = 1000;
+    const pag = (i, cnt) => sb.from('pedidos').select(COLS_P, cnt ? { count: 'exact' } : undefined).order('id').range(i, i + P - 1);
+    let filas = [];
+    const r0 = await pag(0, true);
+    if (r0.error) toast('No se pudieron leer los pedidos.');
+    else {
+      filas = r0.data;
+      if (r0.data.length === P) {
+        if (r0.count != null) {
+          // Todas las páginas restantes a la vez, en lugar de una detrás de otra
+          const rs = await Promise.all(Array.from({ length: Math.ceil(r0.count / P) - 1 }, (_, k) => pag((k + 1) * P)));
+          for (const r of rs) { if (r.error) { toast('No se pudieron leer los pedidos.'); break; } filas = filas.concat(r.data); }
+        } else {
+          for (let i = P; ; i += P) { const { data, error } = await pag(i); if (error) { toast('No se pudieron leer los pedidos.'); break; } filas = filas.concat(data); if (data.length < P) break; }
+        }
+      }
     }
     CHUNKS = { c0: filas.map((r) => ({ i: r.num_pedido, f: Date.parse(r.fecha), c: r.cliente, t: r.telefono, v: r.vendedor, k: r.categoria, m: r.marca, p: r.productos, $: Number(r.total), x: r.canal })) };
     sucio = true;
@@ -958,9 +985,16 @@ tr.click:hover td { background: var(--surface-2); }
     const { data } = await sb.from('perfiles').select('id,email,nombre,rol,creado,aprobado_en').order('creado', { ascending: false });
     USUARIOS = data || [];
   }
-  async function alEntrar() {
+  let cargadoPara = null, entrando = null;
+  function alEntrar(forzar) {
+    if (entrando) return entrando;
+    entrando = alEntrar2(forzar === true).finally(() => { entrando = null; });
+    return entrando;
+  }
+  async function alEntrar2(forzar) {
     const { data: { user } } = await sb.auth.getUser();
-    if (!user) { perfil = null; $('btnSalir').hidden = true; $('dataTag').textContent = 'Recompras'; render(); return; }
+    if (user && !forzar && cargadoPara === user.id && perfil && ACTIVOS.includes(perfil.rol)) return; // ya está todo cargado
+    if (!user) { cargadoPara = null; perfil = null; $('btnSalir').hidden = true; $('dataTag').textContent = 'Recompras'; render(); return; }
     const { data } = await sb.from('perfiles').select('id,email,nombre,rol').eq('id', user.id).single();
     perfil = data || { id: user.id, email: user.email, rol: 'pendiente' };
     puedeEditar = ['admin', 'superadmin'].includes(perfil.rol); esSuper = perfil.rol === 'superadmin';
@@ -968,6 +1002,7 @@ tr.click:hover td { background: var(--surface-2); }
     if (!ACTIVOS.includes(perfil.rol)) { $('dataTag').textContent = perfil.email; render(); return; }
     $('dataTag').textContent = 'Cargando pedidos…'; render();
     await Promise.all([cargarPedidos(), cargarCiclos(), cargarOfrecidos(), cargarUsuarios()]);
+    cargadoPara = user.id;
     $('rolTag').textContent = ROL_T[perfil.rol]; $('rolTag').hidden = false;
     schedule();
     // El superadmin ve llegar los pedidos de acceso sin recargar
@@ -978,10 +1013,14 @@ tr.click:hover td { background: var(--surface-2); }
   // Arranque
   // ============================================================
   let sucio = true;
+  const CFG_P = fetch('/api/config').then((r) => r.json()).catch(() => ({}));
   async function boot() {
     const aviso = (t, d) => { $('app').innerHTML = `<section class="view auth"><div class="card"><h2 class="sec">${t}</h2><p class="note">${d}</p></div></section>`; };
     const leerCfg = async () => { try { return await (await fetch('/api/config')).json(); } catch (e) { return {}; } };
-    let cfg = await leerCfg();
+    const fresca = CFG_P.then((c) => { if (c && c.paso === 'listo' && c.hayUsuarios && c.url && c.anonKey) lsSet('cr-cfg', JSON.stringify({ paso: 'listo', hayUsuarios: true, url: c.url, anonKey: c.anonKey, ia: Boolean(c.ia) })); return c; });
+    let cfg = null; try { cfg = JSON.parse(lsGet('cr-cfg') || 'null'); } catch (e) { cfg = null; }
+    if (cfg && cfg.paso === 'listo' && cfg.url && cfg.anonKey) fresca.then((c) => { if (c && c.paso === 'listo' && Boolean(c.ia) !== iaOn) { iaOn = Boolean(c.ia); schedule(); } });
+    else cfg = (await fresca) || {};
     if (cfg.paso === 'instalar') {
       $('dataTag').textContent = 'Instalando…';
       aviso('Preparando el sistema por primera vez…', 'Estamos creando la base de datos. Tarda unos segundos. No cierres esta página.');
@@ -989,6 +1028,7 @@ tr.click:hover td { background: var(--surface-2); }
       if (!r.ok) { aviso('No se pudo preparar la base de datos', esc(j.error || 'Error desconocido') + '<br><br>Mandale una captura de esta pantalla a quien te ayuda con la web.'); return; }
       await new Promise((ok) => setTimeout(ok, 2000)); cfg = await leerCfg();
     }
+    if (!window.supabase && document.readyState === 'loading') await new Promise((ok) => document.addEventListener('DOMContentLoaded', ok, { once: true }));
     if (cfg.paso !== 'listo' || !window.supabase) {
       $('dataTag').textContent = 'Falta un paso';
       aviso('Falta conectar la base de datos', `${esc(cfg.error || 'No se pudo conectar con la base de datos.')}<br><br>Seguí el <b>Paso 3</b> de la guía: en Vercel, pestaña <b>Storage</b>, crear la base de Supabase y conectarla a este proyecto.`);
