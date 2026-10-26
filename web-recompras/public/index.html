@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Recompras Mercado Digital</title>
+<link rel="preconnect" href="https://vufovgqdbpdtzeizzfep.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Albert+Sans:wght@400;500;600;700&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- El lector de Excel (200 KB) se carga recién al entrar a "Cargar pedidos" -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <style>
 /* Layout: barra de rol arriba, contenido en una columna en celular y dos en escritorio; ficha del cliente como panel inferior */
@@ -299,7 +301,7 @@ tr.click:hover td { background: var(--surface-2); }
   const ROL_T = { pendiente: 'Pendiente', rechazado: 'Rechazado', usuario: 'Usuario', admin: 'Administrador', superadmin: 'Superadmin' };
   const sample = true, downloads = true;
   let CHUNKS = {}, OFRECIDOS = {};
-  let ORD = [], CL = [], CAT = [], PROD = {}, S = null, CO = {};
+  let ORD = [], CL = [], CAT = [], PROD = {}, PROD_CAT = {}, S = null, CO = {};
   let tab = lsGet('cr-tab') || 'resumen';
   const fCli = { q: '', estado: '', rec: '', cat: '', tipo: 'persona', orden: 'ultima', pag: 0 };
   const fOf = { cat: '', ventana: 'ahora', ocultarOfrecidos: true };
@@ -348,8 +350,11 @@ tr.click:hover td { background: var(--surface-2); }
   // ============================================================
   // Análisis
   // ============================================================
-  const cicloDe = (cat) => CICLOS.find((c) => norm(cat).includes(norm(c.match)));
+  // El ciclo de cada categoría se calcula una vez por análisis (se pide miles de veces)
+  const cicloMemo = new Map();
+  const cicloDe = (cat) => { if (!cicloMemo.has(cat)) cicloMemo.set(cat, CICLOS.find((c) => norm(cat).includes(norm(c.match)))); return cicloMemo.get(cat); };
   function analizar() {
+    cicloMemo.clear();
     const raw = Object.keys(CHUNKS).sort((a, b) => +a.slice(1) - +b.slice(1)).flatMap((k) => CHUNKS[k]);
     ORD = raw.map((o) => ({ id: o.i, f: o.f, cli: o.c, tel: o.t, vend: o.v, cat: o.k, marca: o.m, total: o.$, mkt: o.x, prods: (o.p || []).map(([q, n, v]) => ({ q, n, v })) })).sort((a, b) => a.f - b.f);
     if (!ORD.length) { S = null; return; }
@@ -368,8 +373,12 @@ tr.click:hover td { background: var(--surface-2); }
 
     // Productos: ventas, precio, compradores
     PROD = {};
-    ORD.forEach((o) => { const emp = EMPRESA.test(o.cli); o.prods.forEach((p) => { const k = norm(p.n); const x = (PROD[k] ||= { n: p.n, cat: p.cat, marca: p.marca, uds: 0, ped: 0, precios: [], clientes: new Set() }); x.uds += p.q; x.ped++; if (!emp && p.q <= 3) x.precios.push(p.pu); x.clientes.add(o.tel); }); });
+    ORD.forEach((o) => { const emp = EMPRESA.test(o.cli); o.prods.forEach((p) => { const k = norm(p.n); const x = (PROD[k] ||= { k, n: p.n, cat: p.cat, marca: p.marca, uds: 0, ped: 0, precios: [], clientes: new Set() }); x.uds += p.q; x.ped++; if (!emp && p.q <= 3) x.precios.push(p.pu); x.clientes.add(o.tel); }); });
     Object.values(PROD).forEach((x) => { x.precio = med(x.precios) || 0; });
+    // Índice por categoría (con precio, del más comprado al menos): evita recorrer todos los productos por cada cliente
+    PROD_CAT = {};
+    Object.values(PROD).forEach((x) => { if (x.precio) (PROD_CAT[norm(x.cat)] ||= []).push(x); });
+    Object.values(PROD_CAT).forEach((a) => a.sort((x, y) => y.clientes.size - x.clientes.size));
 
     // Clientes
     const by = new Map();
@@ -464,9 +473,7 @@ tr.click:hover td { background: var(--surface-2); }
   }
   function estadoDe(due) { const d = (due - hoy) / DAY; return d < 0 ? 'venc' : d <= 7 ? 'sem' : d <= 30 ? 'prox' : 'fut'; }
   function mejorDeCat(cat, c) {
-    const k = norm(cat);
-    const ps = Object.values(PROD).filter((p) => norm(p.cat) === k && p.precio && !c.prods.has(norm(p.n))).sort((a, b) => b.clientes.size - a.clientes.size);
-    return ps[0] || null;
+    return (PROD_CAT[norm(cat)] || []).find((p) => !c.prods.has(p.k)) || null;
   }
   function alternativa(pk, cat, c) {
     const co = pk && CO.prod[pk];
@@ -787,11 +794,23 @@ tr.click:hover td { background: var(--surface-2); }
       <div class="kpi"><span class="k">Excluidos del análisis</span><span class="v">${S.excl}</span><span class="d">internos y teléfonos dudosos</span></div>
     </div>` : ''}
   </section>`;
+  // El lector de Excel se descarga solo cuando hace falta (una vez)
+  let xlsxP = null;
+  function cargarXLSX() {
+    if (window.XLSX) return Promise.resolve();
+    xlsxP ||= new Promise((ok, ko) => {
+      const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = ok; s.onerror = () => { xlsxP = null; s.remove(); ko(new Error('No cargó el lector de Excel. Revisá la conexión y probá de nuevo.')); };
+      document.head.appendChild(s);
+    });
+    return xlsxP;
+  }
   W.cargar = () => {
+    cargarXLSX().catch(() => {}); // se adelanta mientras eligen el archivo
     $('fileOrd').onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return; const msg = $('upMsg'); msg.hidden = false; msg.style.color = ''; msg.textContent = 'Leyendo ' + f.name + '…';
       try {
-        if (typeof XLSX === 'undefined') throw new Error('No cargó el lector de Excel. Recargá la página.');
+        await cargarXLSX();
         const buf = await f.arrayBuffer();
         const wb = /\.csv$/i.test(f.name) ? XLSX.read(new TextDecoder('utf-8').decode(buf), { type: 'string' }) : XLSX.read(buf, { type: 'array' });
         const { pedidos, anulados } = leerExcel(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }));
@@ -864,7 +883,7 @@ tr.click:hover td { background: var(--surface-2); }
       e.preventDefault(); const b = $('aBtn') || e.target.querySelector('button[type=submit]'); b.disabled = true;
       const email = $('aEmail')?.value.trim(), pass = $('aPass')?.value || '';
       let r;
-      if (recuperando) { r = await sb.auth.updateUser({ password: pass }); if (!r.error) { recuperando = false; authMsg = null; await alEntrar(); return; } }
+      if (recuperando) { r = await sb.auth.updateUser({ password: pass }); if (!r.error) { recuperando = false; authMsg = null; await alEntrar(); render(); return; } }
       else if (authModo === 'crear') {
         if (pass.length < 8) { authMsg = { ok: false, txt: 'La clave tiene que tener al menos 8 caracteres.' }; render(); return; }
         const rr = await fetch('/api/registro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass, nombre: $('aNombre').value.trim() }) });
@@ -934,12 +953,14 @@ tr.click:hover td { background: var(--surface-2); }
     return j;
   }
   async function cargarPedidos() {
-    const filas = []; const P = 1000;
-    for (let i = 0; ; i += P) {
-      const { data, error } = await sb.from('pedidos').select('num_pedido,fecha,cliente,telefono,vendedor,categoria,marca,productos,total,canal').order('id').range(i, i + P - 1);
-      if (error) { toast('No se pudieron leer los pedidos.'); break; }
-      filas.push(...data); if (data.length < P) break;
-    }
+    // La primera página trae también el total; el resto de las páginas se piden todas juntas
+    const COLS_P = 'num_pedido,fecha,cliente,telefono,vendedor,categoria,marca,productos,total,canal'; const P = 1000;
+    const pagina = (i, conteo) => sb.from('pedidos').select(COLS_P, conteo ? { count: 'exact' } : undefined).order('id').range(i * P, i * P + P - 1);
+    const p0 = await pagina(0, true);
+    if (p0.error) { toast('No se pudieron leer los pedidos.'); return; }
+    const resto = await Promise.all(Array.from({ length: Math.max(0, Math.ceil((p0.count || 0) / P) - 1) }, (_, k) => pagina(k + 1)));
+    if (resto.some((r) => r.error)) { toast('No se pudieron leer todos los pedidos. Recargá la página.'); return; }
+    const filas = [p0, ...resto].flatMap((r) => r.data || []);
     CHUNKS = { c0: filas.map((r) => ({ i: r.num_pedido, f: Date.parse(r.fecha), c: r.cliente, t: r.telefono, v: r.vendedor, k: r.categoria, m: r.marca, p: r.productos, $: Number(r.total), x: r.canal })) };
     sucio = true;
     if (!filas.length) { S = null; $('dataTag').textContent = 'Sin pedidos cargados'; }
@@ -958,8 +979,18 @@ tr.click:hover td { background: var(--surface-2); }
     const { data } = await sb.from('perfiles').select('id,email,nombre,rol,creado,aprobado_en').order('creado', { ascending: false });
     USUARIOS = data || [];
   }
-  async function alEntrar() {
-    const { data: { user } } = await sb.auth.getUser();
+  // Una sola entrada a la vez: Supabase avisa "SIGNED_IN" varias veces (al abrir, al volver a la pestaña,
+  // al renovar la sesión). Si ya están cargados los datos de ese mismo usuario, no se vuelven a bajar.
+  let entrando = null, uidCargado = null;
+  function alEntrar() {
+    if (!entrando) entrando = entrar().finally(() => { entrando = null; });
+    return entrando;
+  }
+  async function entrar() {
+    const { data: { session } } = await sb.auth.getSession();
+    const user = session?.user || null;
+    if (user && user.id === uidCargado && perfil && ACTIVOS.includes(perfil.rol)) return;
+    uidCargado = null;
     if (!user) { perfil = null; $('btnSalir').hidden = true; $('dataTag').textContent = 'Recompras'; render(); return; }
     const { data } = await sb.from('perfiles').select('id,email,nombre,rol').eq('id', user.id).single();
     perfil = data || { id: user.id, email: user.email, rol: 'pendiente' };
@@ -968,6 +999,7 @@ tr.click:hover td { background: var(--surface-2); }
     if (!ACTIVOS.includes(perfil.rol)) { $('dataTag').textContent = perfil.email; render(); return; }
     $('dataTag').textContent = 'Cargando pedidos…'; render();
     await Promise.all([cargarPedidos(), cargarCiclos(), cargarOfrecidos(), cargarUsuarios()]);
+    uidCargado = user.id;
     $('rolTag').textContent = ROL_T[perfil.rol]; $('rolTag').hidden = false;
     schedule();
     // El superadmin ve llegar los pedidos de acceso sin recargar
@@ -980,8 +1012,19 @@ tr.click:hover td { background: var(--surface-2); }
   let sucio = true;
   async function boot() {
     const aviso = (t, d) => { $('app').innerHTML = `<section class="view auth"><div class="card"><h2 class="sec">${t}</h2><p class="note">${d}</p></div></section>`; };
-    const leerCfg = async () => { try { return await (await fetch('/api/config')).json(); } catch (e) { return {}; } };
-    let cfg = await leerCfg();
+    // La configuración (dirección pública de la base) casi nunca cambia: se guarda en el navegador y se usa
+    // al instante; en paralelo se pide al servidor y, si cambió, se recarga la página.
+    const CFG_K = 'cr-cfg';
+    const leerCfg = async () => { try { const j = await (await fetch('/api/config')).json(); if (j.paso === 'listo') lsSet(CFG_K, JSON.stringify(j)); return j; } catch (e) { return {}; } };
+    let cfg = null; try { cfg = JSON.parse(lsGet(CFG_K) || 'null'); } catch (e) { cfg = null; }
+    const cfgRed = leerCfg();
+    if (cfg && cfg.paso === 'listo' && cfg.url && cfg.anonKey) {
+      cfgRed.then((n) => {
+        if (!n.paso) return; // sin red: seguimos con lo guardado
+        if (n.paso !== 'listo' || n.url !== cfg.url || n.anonKey !== cfg.anonKey) { lsSet(CFG_K, ''); location.reload(); return; }
+        if (Boolean(n.ia) !== iaOn) { iaOn = Boolean(n.ia); schedule(); }
+      });
+    } else cfg = await cfgRed;
     if (cfg.paso === 'instalar') {
       $('dataTag').textContent = 'Instalando…';
       aviso('Preparando el sistema por primera vez…', 'Estamos creando la base de datos. Tarda unos segundos. No cierres esta página.');
