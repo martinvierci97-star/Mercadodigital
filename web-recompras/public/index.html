@@ -316,6 +316,9 @@ tr.click:hover td { background: var(--surface-2); }
     variante: ['variante', 'variantes', 'id variante', 'ids variantes', 'codigo variante', 'sku', 'skus', 'variant', 'variant id'],
   };
   const ANULADO = /cancel|devuel|devoluc|reembols|anulad|rechaz/i;
+  // Clientes que no cuentan para el análisis (familia, revendedores y compras institucionales). Se compara con el nombre del pedido.
+  const EXCLUIR = ['vierci', 'claudio escobar', 'universidad americana', 'tecinci', 'tecnoedil'];
+  const excluido = (nombre) => { const k = norm(nombre); return EXCLUIR.some((x) => k.includes(x)); };
   const EMPRESA = /\b(s\.?\s?a\.?|s\.?r\.?l\.?|e\.?i\.?r\.?l\.?|ltda|universidad|colegio|cisa|sociedad|cooperativa|ministerio|municipalidad|fundacion|instituto|banco|clinica|sanatorio|hotel)\b/i;
   function parseFecha(v) {
     if (v instanceof Date) return v.getTime();
@@ -356,6 +359,7 @@ tr.click:hover td { background: var(--surface-2); }
     const t0 = performance.now(); _CIC = new Map();
     const raw = Object.keys(CHUNKS).sort((a, b) => +a.slice(1) - +b.slice(1)).flatMap((k) => CHUNKS[k]);
     ORD = raw.map((o) => ({ id: o.i, f: o.f, cli: o.c, tel: o.t, vend: o.v, cat: o.k, marca: o.m, total: o.$, mkt: o.x, prods: (o.p || []).map(([q, n, v]) => ({ q, n, v })) })).sort((a, b) => a.f - b.f);
+    const antesExcl = ORD.length; ORD = ORD.filter((o) => !excluido(o.cli)); const exclPed = antesExcl - ORD.length;
     if (!ORD.length) { S = null; return; }
     // Precio por producto: exacto si el pedido trae un solo producto; si trae varios, prorrateado
     const pkey = (p) => (p.v ? 'v:' + p.v : norm(p.n));
@@ -430,7 +434,7 @@ tr.click:hover td { background: var(--surface-2); }
     ORD.forEach((o) => { const d = new Date(o.f); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); (meses[k] ||= { nuevos: 0, vuelven: 0, total: 0, totRec: 0 }); meses[k].total += o.total; if (vistos.has(o.tel)) { meses[k].vuelven++; meses[k].totRec += o.total; } else meses[k].nuevos++; vistos.add(o.tel); });
     S = { tot, n: ORD.length, desde: ORD[0].f, hasta: ORD[ORD.length - 1].f, clientes: base.length, pers: pers.length, emp: base.filter((c) => c.empresa).length,
       rec: rec.length, una: pers.length - rec.length, totRec: rec.reduce((s, c) => s + c.total, 0), totPers: pers.reduce((s, c) => s + c.total, 0),
-      gapMed: med(rec.map((c) => c.intervalo).filter((x) => x != null)), meses, excl: CL.length - base.length,
+      gapMed: med(rec.map((c) => c.intervalo).filter((x) => x != null)), meses, excl: CL.length - base.length, exclPed,
       porRec: Object.fromEntries(RECENCIA.map((r) => [r.k, pers.filter((c) => c.rec === r.k)])),
       conIds: ORD.every((o) => o.id), conVar: ORD.some((o) => o.prods.some((p) => p.v)) };
     $('dataTag').textContent = `${nf(S.n)} pedidos · ${fecha(S.desde)} al ${fecha(S.hasta)}`;
@@ -521,7 +525,7 @@ tr.click:hover td { background: var(--surface-2); }
     const potencial = [...venc, ...sem].reduce((s, c) => s + c.prox.precio, 0);
     const maxR = Math.max(...RECENCIA.map((r) => S.porRec[r.k].length));
     return `<section class="view">
-      <div class="hdr"><h2 class="sec">¿Cuánta gente vuelve a comprar?</h2><p class="sub num">${nf(S.pers)} clientes personas (sin empresas, internos ni teléfonos dudosos) · pedidos del ${fecha(S.desde)} al ${fecha(S.hasta)}.</p></div>
+      <div class="hdr"><h2 class="sec">¿Cuánta gente vuelve a comprar?</h2><p class="sub num">${nf(S.pers)} clientes personas (sin empresas, internos, teléfonos dudosos ni la lista de excluidos) · pedidos del ${fecha(S.desde)} al ${fecha(S.hasta)}.</p></div>
       <div class="kpis num">
         <div class="kpi"><span class="k">Recompraron</span><span class="v" style="color:var(--ok)">${nf(S.rec)}</span><span class="d">${pct(S.rec / S.pers)} de los clientes compró 2 veces o más</span></div>
         <div class="kpi"><span class="k">Compraron una sola vez</span><span class="v" style="color:var(--bad)">${nf(S.una)}</span><span class="d">${pct(S.una / S.pers)} nunca volvió</span></div>
@@ -799,7 +803,7 @@ tr.click:hover td { background: var(--surface-2); }
     ${S ? `<div class="kpis num">
       <div class="kpi"><span class="k">Número de pedido</span><span class="v">${S.conIds ? 'Sí' : 'No'}</span><span class="d">${S.conIds ? 'Los archivos se suman sin duplicar.' : 'Cada archivo reemplaza al anterior.'}</span></div>
       <div class="kpi"><span class="k">Variante</span><span class="v">${S.conVar ? 'Sí' : 'No'}</span><span class="d">${S.conVar ? 'Lista para traer el margen.' : 'Falta para traer el margen de la API.'}</span></div>
-      <div class="kpi"><span class="k">Excluidos del análisis</span><span class="v">${S.excl}</span><span class="d">internos y teléfonos dudosos</span></div>
+      <div class="kpi"><span class="k">Excluidos del análisis</span><span class="v">${S.excl}</span><span class="d">internos y teléfonos dudosos · además ${nf(S.exclPed)} pedidos de la lista de excluidos (${esc(EXCLUIR.join(', '))})</span></div>
     </div>` : ''}
   </section>`;
   W.cargar = () => {
